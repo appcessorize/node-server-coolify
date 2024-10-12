@@ -42,7 +42,7 @@ const openai = new OpenAI({ apiKey: openaiApiKey });
 const SUNO_BASE_URL = "https://api.sunoaiapi.com/api/v1/gateway";
 
 // Healthcheck Endpoint
-app.get("/healthcheck", (req, res) => {
+app.get("/health", (req, res) => {
   if (!checkEnvVariables()) {
     return res.status(500).json({ message: "Internal Server Error" });
   }
