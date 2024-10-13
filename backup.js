@@ -1,3 +1,5 @@
+// server.js
+
 const express = require("express");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
@@ -5,6 +7,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const cors = require("cors");
 const archiver = require("archiver");
+const OpenAI = require("openai");
 const axios = require("axios");
 
 const app = express();
@@ -14,10 +17,16 @@ app.use(express.json());
 const upload = multer({ dest: "uploads/" });
 
 // Load API keys from environment variables
+const openaiApiKey = process.env.OPENAI_API_KEY;
 const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
 
-const requiredEnvVars = ["SUNO_API_KEY", "API_KEY_1", "API_KEY_2"];
+const requiredEnvVars = [
+  "OPENAI_API_KEY",
+  "SUNO_API_KEY",
+  "API_KEY_1",
+  "API_KEY_2",
+];
 
 function checkEnvVariables() {
   const missingVars = requiredEnvVars.filter(
@@ -31,6 +40,7 @@ if (!checkEnvVariables()) {
   process.exit(1);
 }
 
+const openai = new OpenAI({ apiKey: openaiApiKey });
 const SUNO_BASE_URL = "https://api.sunoaiapi.com/api/v1/gateway";
 
 // Healthcheck Endpoint
@@ -75,51 +85,33 @@ app.use((req, res, next) => {
   return apiKeyAuth(req, res, next);
 });
 
-// Function to generate lyrics using Suno
+// Function to generate lyrics using OpenAI
 async function generateLyrics(prompt) {
-  console.log("Generating lyrics with Suno...");
+  console.log("Generating lyrics with OpenAI...");
   try {
-    const response = await axios.post(
-      `${SUNO_BASE_URL}/generate/lyrics`,
-      { prompt },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": sunoApiKey,
-        },
-      }
-    );
-
-    const lyricsId = response.data.data.id;
-    console.log("Lyrics generation ID:", lyricsId);
-
-    // Poll for lyrics completion
-    let lyrics = null;
-    let attempts = 0;
-    const maxAttempts = 10;
-    const interval = 5000; // 5 seconds
-
-    while (!lyrics && attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, interval));
-      const lyricsResponse = await axios.get(
-        `${SUNO_BASE_URL}/lyrics/${lyricsId}`,
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
         {
-          headers: { "api-key": sunoApiKey },
-        }
-      );
+          role: "system",
+          content:
+            "Generate song lyrics based on the following prompt. The song should be around 30 seconds long. It should be a ringtone about the person calling",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 1,
+      max_tokens: 256,
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    });
 
-      if (lyricsResponse.data.data.status === "complete") {
-        lyrics = lyricsResponse.data.data.text;
-        console.log("Generated Lyrics:", lyrics);
-      }
-
-      attempts++;
-    }
-
-    if (!lyrics) {
-      throw new Error("Lyrics generation timed out");
-    }
-
+    console.log("OpenAI Response:", JSON.stringify(response, null, 2));
+    const lyrics = response.choices[0].message.content;
+    console.log("Generated Lyrics:", lyrics);
     return lyrics;
   } catch (error) {
     console.error("Error generating lyrics:", error);
@@ -128,7 +120,7 @@ async function generateLyrics(prompt) {
 }
 
 // Function to generate music using Suno
-async function generateMusic(lyrics, prompt, duration = 29) {
+async function generateMusic(lyrics) {
   console.log("Generating music with Suno...");
   try {
     const response = await axios.post(
@@ -136,10 +128,9 @@ async function generateMusic(lyrics, prompt, duration = 29) {
       {
         title: "ringtone",
         tags: "generated, ai",
-        prompt: `Make a song with no intro, go straight into the lyrics. ${prompt}`,
-        lyrics: lyrics,
+        prompt:
+          "Make a song with no intro, go straight into the lyrics. " + lyrics,
         mv: "chirp-v3-5",
-        duration: duration, // Default to 29 seconds
       },
       {
         headers: {
@@ -251,7 +242,7 @@ app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
   let tempInputPath, outputPath;
   try {
-    const { prompt, duration = 29 } = req.body; // Default to 29 seconds if not specified
+    const { prompt } = req.body;
     const validatedPrompt = validatePrompt(prompt);
 
     const outputDir = path.join(__dirname, "temp_outputs");
@@ -263,13 +254,13 @@ app.post("/generate-and-process", async (req, res) => {
     console.log("Ensuring temporary output directory exists...");
     await fs.ensureDir(outputDir);
 
-    // Step 1: Generate lyrics with Suno
+    // Step 1: Generate lyrics with OpenAI
     console.log("Step 1: Generating lyrics...");
     const lyrics = await generateLyrics(validatedPrompt);
 
-    // Step 2: Generate music with Suno using the lyrics and specified duration
+    // Step 2: Generate music with Suno using the lyrics
     console.log("Step 2: Generating music...");
-    const songIds = await generateMusic(lyrics, validatedPrompt, duration);
+    const songIds = await generateMusic(lyrics);
 
     // Wait for music generation to complete and get audio URL
     console.log("Waiting for music generation to complete...");
@@ -279,12 +270,12 @@ app.post("/generate-and-process", async (req, res) => {
     console.log("Downloading generated audio...");
     await downloadFile(audioUrl, tempInputPath);
 
-    // Step 3: Convert audio to AIFF without trimming
-    console.log("Step 3: Converting audio to AIFF...");
+    // Step 3: Convert audio to AIFF and trim
+    console.log("Step 3: Converting and trimming audio...");
     await new Promise((resolve, reject) => {
       ffmpeg(tempInputPath)
-        // .setStartTime(3)  // Commented out
-        // .setDuration(28)  // Commented out
+        .setStartTime(3)
+        .setDuration(28)
         .output(outputPath)
         .audioCodec("pcm_s16be")
         .audioChannels(2)
@@ -296,7 +287,7 @@ app.post("/generate-and-process", async (req, res) => {
         .on("error", reject)
         .run();
     });
-    console.log("Audio converted to AIFF successfully");
+    console.log("Audio converted to AIFF, trimmed, and processed successfully");
 
     // Step 4: Replace file in .band package
     console.log("Step 4: Replacing file in .band package...");
@@ -370,6 +361,7 @@ const server = app.listen(PORT, () => {
     }
   });
   console.log("Environment variables loaded:", {
+    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
     SUNO_API_KEY: !!process.env.SUNO_API_KEY,
     API_KEY_1: !!process.env.API_KEY_1,
     API_KEY_2: !!process.env.API_KEY_2,
