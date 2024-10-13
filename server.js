@@ -1,4 +1,4 @@
-// require("dotenv").config({ path: "./local.env" });
+// require('dotenv').config({ path: './local.env' });
 
 const express = require("express");
 const multer = require("multer");
@@ -124,7 +124,10 @@ async function generateLyrics(prompt) {
 
     return lyrics;
   } catch (error) {
-    console.error("Error generating lyrics:", error);
+    console.error(
+      "Error generating lyrics:",
+      error.response ? error.response.data : error.message
+    );
     throw error;
   }
 }
@@ -138,11 +141,11 @@ async function generateMusic(lyrics, prompt, duration = 29) {
       {
         title: "ringtone",
         tags: "generated, ai, vocal",
-        prompt: `Create a ${duration}-second ringtone with vocals. It should be a catchy and fun ringtone about ${prompt} calling. Start immediately with the lyrics: ${lyrics}. `,
+        prompt: `Create a ${duration}-second song with vocals. Start immediately with the lyrics: ${lyrics}. ${prompt}`,
         lyrics: lyrics,
         mv: "chirp-v3-5",
         duration: duration,
-        make_instrumental: false, // Explicitly set to false to ensure vocals
+        make_instrumental: false,
       },
       {
         headers: {
@@ -152,11 +155,21 @@ async function generateMusic(lyrics, prompt, duration = 29) {
       }
     );
 
+    console.log("Suno API Response:", JSON.stringify(response.data, null, 2));
+
     const songIds = response.data.data.map((song) => song.song_id);
     console.log("Generated song IDs:", songIds);
+
+    if (songIds.length === 0) {
+      throw new Error("No song IDs were generated");
+    }
+
     return songIds;
   } catch (error) {
-    console.error("Error generating music:", error);
+    console.error(
+      "Error generating music:",
+      error.response ? error.response.data : error.message
+    );
     throw error;
   }
 }
@@ -193,13 +206,20 @@ async function checkStatus(songIds) {
 
     return { allComplete, audioUrl };
   } catch (error) {
-    console.error("Error checking status:", error);
+    console.error(
+      "Error checking status:",
+      error.response ? error.response.data : error.message
+    );
     return { allComplete: false, audioUrl: null };
   }
 }
 
 // Function to poll status until complete or max attempts reached
 async function pollStatus(songIds) {
+  if (!songIds || songIds.length === 0) {
+    throw new Error("No song IDs provided for status polling");
+  }
+
   const interval = 15000; // 15 seconds
   const maxAttempts = 20;
   let attempts = 0;
