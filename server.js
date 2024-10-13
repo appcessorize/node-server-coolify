@@ -126,7 +126,7 @@ async function generateMusic(lyrics) {
         title: "ringtone",
         tags: "generated, ai,fun,ringtone,nointro",
         prompt:
-          "Make a song with no intro, go straight into the lyrics. " + lyrics,
+          "[Make a song with no intro, go straight into the lyrics]" + lyrics,
         mv: "chirp-v3-5",
       },
       {
