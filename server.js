@@ -92,7 +92,7 @@ async function generateLyrics(prompt) {
         {
           role: "system",
           content:
-            "Generate song lyrics for a 30 second ringtone based on the following prompt. The song should be around 30 seconds long. It should be a fun ringtone about the person calling",
+            "Generate happy and fun song lyrics for a 30 second ringtone based on the following prompt. The song should be around 30 seconds long. It should be a fun ringtone about the person calling",
         },
         {
           role: "user",
@@ -108,7 +108,7 @@ async function generateLyrics(prompt) {
 
     console.log("OpenAI Response:", JSON.stringify(response, null, 2));
     const lyrics = response.choices[0].message.content;
-    console.log("Generated Lyrics:", lyrics);
+    console.log("NEW Generated Lyrics:", lyrics);
     return lyrics;
   } catch (error) {
     console.error("Error generating lyrics:", error);
@@ -340,7 +340,7 @@ const server = app.listen(PORT, () => {
 server.on("error", (e) => {
   if (e.code === "EADDRINUSE") {
     console.log(
-      `Port ${PORT} is already in use. Please choose a different port.`
+      `Port ${PORT} is already in use. Please choose a different port!`
     );
   } else {
     console.log("An error occurred:", e);
