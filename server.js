@@ -1,4 +1,4 @@
-require('dotenv').config({ path: './local.env' });
+// server.js
 
 const express = require("express");
 const multer = require("multer");
@@ -7,6 +7,7 @@ const fs = require("fs-extra");
 const path = require("path");
 const cors = require("cors");
 const archiver = require("archiver");
+const OpenAI = require("openai");
 const axios = require("axios");
 
 const app = express();
@@ -16,10 +17,12 @@ app.use(express.json());
 const upload = multer({ dest: "uploads/" });
 
 // Load API keys from environment variables
+const openaiApiKey = process.env.OPENAI_API_KEY;
 const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
 
 const requiredEnvVars = [
+  "OPENAI_API_KEY",
   "SUNO_API_KEY",
   "API_KEY_1",
   "API_KEY_2",
@@ -37,6 +40,7 @@ if (!checkEnvVariables()) {
   process.exit(1);
 }
 
+const openai = new OpenAI({ apiKey: openaiApiKey });
 const SUNO_BASE_URL = "https://api.sunoaiapi.com/api/v1/gateway";
 
 // Healthcheck Endpoint
@@ -81,76 +85,52 @@ app.use((req, res, next) => {
   return apiKeyAuth(req, res, next);
 });
 
-// Function to generate lyrics using Suno
+// Function to generate lyrics using OpenAI
 async function generateLyrics(prompt) {
-  console.log("Generating lyrics with Suno...");
+  console.log("Generating lyrics with OpenAI...");
   try {
-    const response = await axios.post(
-      `${SUNO_BASE_URL}/generate/lyrics`,
-      { prompt },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": sunoApiKey,
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate song lyrics for a 30 second ringtone based on the following prompt. The song should be around 30 seconds long. It should be a fun ringtone about the person calling",
         },
-      }
-    );
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 1,
+      max_tokens: 256,
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    });
 
-    console.log("Lyrics generation response:", JSON.stringify(response.data, null, 2));
-
-    const lyricsId = response.data.data.id;
-    console.log("Lyrics generation ID:", lyricsId);
-
-    // Poll for lyrics completion
-    let lyrics = null;
-    let attempts = 0;
-    const maxAttempts = 20;
-    const interval = 5000; // 5 seconds
-
-    while (!lyrics && attempts < maxAttempts) {
-      console.log(`Polling for lyrics completion. Attempt ${attempts + 1}/${maxAttempts}`);
-      await new Promise(resolve => setTimeout(resolve, interval));
-      const lyricsResponse = await axios.get(`${SUNO_BASE_URL}/lyrics/${lyricsId}`, {
-        headers: { "api-key": sunoApiKey },
-      });
-
-      console.log("Lyrics status response:", JSON.stringify(lyricsResponse.data, null, 2));
-
-      if (lyricsResponse.data.data.status === 'complete') {
-        lyrics = lyricsResponse.data.data.text;
-        console.log("Generated Lyrics:", lyrics);
-      } else if (lyricsResponse.data.data.status === 'error') {
-        throw new Error(`Lyrics generation failed: ${lyricsResponse.data.data.error_message}`);
-      }
-
-      attempts++;
-    }
-
-    if (!lyrics) {
-      throw new Error("Lyrics generation timed out");
-    }
-
+    console.log("OpenAI Response:", JSON.stringify(response, null, 2));
+    const lyrics = response.choices[0].message.content;
+    console.log("Generated Lyrics:", lyrics);
     return lyrics;
   } catch (error) {
-    console.error("Error generating lyrics:", error.response ? error.response.data : error.message);
+    console.error("Error generating lyrics:", error);
     throw error;
   }
 }
 
 // Function to generate music using Suno
-async function generateMusic(lyrics, prompt, duration = 29) {
+async function generateMusic(lyrics) {
   console.log("Generating music with Suno...");
   try {
     const response = await axios.post(
       `${SUNO_BASE_URL}/generate/music`,
       {
         title: "ringtone",
-        tags: "generated, ai, vocal",
-        prompt: `Create a ${duration}-second song with vocals. Start immediately with the lyrics: ${lyrics}. ${prompt}`,
-        lyrics: lyrics,
+        tags: "generated, ai",
+        prompt:
+          "Make a song with no intro, go straight into the lyrics. " + lyrics,
         mv: "chirp-v3-5",
-        duration: duration,
-        make_instrumental: false
       },
       {
         headers: {
@@ -160,18 +140,11 @@ async function generateMusic(lyrics, prompt, duration = 29) {
       }
     );
 
-    console.log("Suno API Response:", JSON.stringify(response.data, null, 2));
-
     const songIds = response.data.data.map((song) => song.song_id);
     console.log("Generated song IDs:", songIds);
-
-    if (songIds.length === 0) {
-      throw new Error("No song IDs were generated");
-    }
-
     return songIds;
   } catch (error) {
-    console.error("Error generating music:", error.response ? error.response.data : error.message);
+    console.error("Error generating music:", error);
     throw error;
   }
 }
@@ -208,17 +181,13 @@ async function checkStatus(songIds) {
 
     return { allComplete, audioUrl };
   } catch (error) {
-    console.error("Error checking status:", error.response ? error.response.data : error.message);
+    console.error("Error checking status:", error);
     return { allComplete: false, audioUrl: null };
   }
 }
 
 // Function to poll status until complete or max attempts reached
 async function pollStatus(songIds) {
-  if (!songIds || songIds.length === 0) {
-    throw new Error("No song IDs provided for status polling");
-  }
-
   const interval = 15000; // 15 seconds
   const maxAttempts = 20;
   let attempts = 0;
@@ -268,25 +237,12 @@ async function replaceFileInBand(bandFilePath, newFilePath, targetPath) {
   console.log(`File replaced successfully in .band package`);
 }
 
-// Function to trim audio to exact duration
-async function trimAudio(inputPath, outputPath, duration) {
-  return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .setStartTime(0)
-      .setDuration(duration)
-      .output(outputPath)
-      .on('end', resolve)
-      .on('error', reject)
-      .run();
-  });
-}
-
 // Main route for processing
 app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
   let tempInputPath, outputPath;
   try {
-    const { prompt, duration = 29 } = req.body;
+    const { prompt } = req.body;
     const validatedPrompt = validatePrompt(prompt);
 
     const outputDir = path.join(__dirname, "temp_outputs");
@@ -298,44 +254,28 @@ app.post("/generate-and-process", async (req, res) => {
     console.log("Ensuring temporary output directory exists...");
     await fs.ensureDir(outputDir);
 
-    // Step 1: Generate lyrics with Suno
+    // Step 1: Generate lyrics with OpenAI
     console.log("Step 1: Generating lyrics...");
     const lyrics = await generateLyrics(validatedPrompt);
-    console.log("Generated lyrics:", lyrics);
 
-    // Step 2: Generate music with Suno using the lyrics and specified duration
+    // Step 2: Generate music with Suno using the lyrics
     console.log("Step 2: Generating music...");
-    const songIds = await generateMusic(lyrics, validatedPrompt, duration);
+    const songIds = await generateMusic(lyrics);
 
     // Wait for music generation to complete and get audio URL
     console.log("Waiting for music generation to complete...");
     const audioUrl = await pollStatus(songIds);
 
-    // Log audio information
-    console.log("Audio URL:", audioUrl);
-
     // Download the generated audio file
     console.log("Downloading generated audio...");
     await downloadFile(audioUrl, tempInputPath);
 
-    // Log audio file information
-    const audioInfo = await new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-        if (err) reject(err);
-        else resolve(metadata);
-      });
-    });
-    console.log("Audio file information:", JSON.stringify(audioInfo, null, 2));
-
-    // Trim audio to exact duration if necessary
-    const trimmedPath = path.join(outputDir, "trimmed_input.mp3");
-    await trimAudio(tempInputPath, trimmedPath, duration);
-    tempInputPath = trimmedPath;
-
-    // Step 3: Convert audio to AIFF
-    console.log("Step 3: Converting audio to AIFF...");
+    // Step 3: Convert audio to AIFF and trim
+    console.log("Step 3: Converting and trimming audio...");
     await new Promise((resolve, reject) => {
       ffmpeg(tempInputPath)
+        .setStartTime(3)
+        .setDuration(28)
         .output(outputPath)
         .audioCodec("pcm_s16be")
         .audioChannels(2)
@@ -347,7 +287,7 @@ app.post("/generate-and-process", async (req, res) => {
         .on("error", reject)
         .run();
     });
-    console.log("Audio converted to AIFF successfully");
+    console.log("Audio converted to AIFF, trimmed, and processed successfully");
 
     // Step 4: Replace file in .band package
     console.log("Step 4: Replacing file in .band package...");
@@ -421,6 +361,19 @@ const server = app.listen(PORT, () => {
     }
   });
   console.log("Environment variables loaded:", {
+    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
     SUNO_API_KEY: !!process.env.SUNO_API_KEY,
     API_KEY_1: !!process.env.API_KEY_1,
     API_KEY_2: !!process.env.API_KEY_2,
+  });
+});
+
+server.on("error", (e) => {
+  if (e.code === "EADDRINUSE") {
+    console.log(
+      `Port ${PORT} is already in use. Please choose a different port.`
+    );
+  } else {
+    console.log("An error occurred:", e);
+  }
+});
