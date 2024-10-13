@@ -1,3 +1,5 @@
+require("dotenv").config({ path: "./local.env" });
+
 const express = require("express");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
@@ -135,11 +137,12 @@ async function generateMusic(lyrics, prompt, duration = 29) {
       `${SUNO_BASE_URL}/generate/music`,
       {
         title: "ringtone",
-        tags: "generated, ai",
-        prompt: `Make a song with no intro, go straight into the lyrics. ${prompt}`,
+        tags: "generated, ai, vocal",
+        prompt: `Create a ${duration}-second ringtone with vocals. It should be a catchy and fun ringtone about ${prompt} calling. Start immediately with the lyrics: ${lyrics}. `,
         lyrics: lyrics,
         mv: "chirp-v3-5",
-        duration: duration, // Default to 29 seconds
+        duration: duration,
+        make_instrumental: false, // Explicitly set to false to ensure vocals
       },
       {
         headers: {
@@ -246,12 +249,25 @@ async function replaceFileInBand(bandFilePath, newFilePath, targetPath) {
   console.log(`File replaced successfully in .band package`);
 }
 
+// Function to trim audio to exact duration
+async function trimAudio(inputPath, outputPath, duration) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .setStartTime(0)
+      .setDuration(duration)
+      .output(outputPath)
+      .on("end", resolve)
+      .on("error", reject)
+      .run();
+  });
+}
+
 // Main route for processing
 app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
   let tempInputPath, outputPath;
   try {
-    const { prompt, duration = 29 } = req.body; // Default to 29 seconds if not specified
+    const { prompt, duration = 29 } = req.body;
     const validatedPrompt = validatePrompt(prompt);
 
     const outputDir = path.join(__dirname, "temp_outputs");
@@ -266,6 +282,7 @@ app.post("/generate-and-process", async (req, res) => {
     // Step 1: Generate lyrics with Suno
     console.log("Step 1: Generating lyrics...");
     const lyrics = await generateLyrics(validatedPrompt);
+    console.log("Generated lyrics:", lyrics);
 
     // Step 2: Generate music with Suno using the lyrics and specified duration
     console.log("Step 2: Generating music...");
@@ -275,16 +292,31 @@ app.post("/generate-and-process", async (req, res) => {
     console.log("Waiting for music generation to complete...");
     const audioUrl = await pollStatus(songIds);
 
+    // Log audio information
+    console.log("Audio URL:", audioUrl);
+
     // Download the generated audio file
     console.log("Downloading generated audio...");
     await downloadFile(audioUrl, tempInputPath);
 
-    // Step 3: Convert audio to AIFF without trimming
+    // Log audio file information
+    const audioInfo = await new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
+        if (err) reject(err);
+        else resolve(metadata);
+      });
+    });
+    console.log("Audio file information:", JSON.stringify(audioInfo, null, 2));
+
+    // Trim audio to exact duration if necessary
+    const trimmedPath = path.join(outputDir, "trimmed_input.mp3");
+    await trimAudio(tempInputPath, trimmedPath, duration);
+    tempInputPath = trimmedPath;
+
+    // Step 3: Convert audio to AIFF
     console.log("Step 3: Converting audio to AIFF...");
     await new Promise((resolve, reject) => {
       ffmpeg(tempInputPath)
-        // .setStartTime(3)  // Commented out
-        // .setDuration(28)  // Commented out
         .output(outputPath)
         .audioCodec("pcm_s16be")
         .audioChannels(2)
