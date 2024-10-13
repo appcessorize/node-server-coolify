@@ -1,12 +1,9 @@
-// server.js
-
 const express = require("express");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs-extra");
 const path = require("path");
 const cors = require("cors");
-const archiver = require("archiver");
 const OpenAI = require("openai");
 const axios = require("axios");
 
@@ -79,7 +76,7 @@ function apiKeyAuth(req, res, next) {
 
 // Apply API key middleware to all routes except / and /healthcheck
 app.use((req, res, next) => {
-  if (req.path === "/" || req.path === "/healthcheck") {
+  if (req.path === "/" || req.path === "/health") {
     return next();
   }
   return apiKeyAuth(req, res, next);
@@ -127,7 +124,7 @@ async function generateMusic(lyrics) {
       `${SUNO_BASE_URL}/generate/music`,
       {
         title: "ringtone",
-        tags: "generated, ai",
+        tags: "generated, ai,fun,ringtone,nointro",
         prompt:
           "Make a song with no intro, go straight into the lyrics. " + lyrics,
         mv: "chirp-v3-5",
@@ -227,16 +224,6 @@ async function downloadFile(url, outputPath) {
   });
 }
 
-// Function to replace file in .band package
-async function replaceFileInBand(bandFilePath, newFilePath, targetPath) {
-  console.log(`Replacing file in .band package...`);
-  console.log(`Source: ${newFilePath}`);
-  console.log(`Destination: ${targetPath}`);
-  await fs.ensureDir(path.dirname(targetPath));
-  await fs.copy(newFilePath, targetPath, { overwrite: true });
-  console.log(`File replaced successfully in .band package`);
-}
-
 // Main route for processing
 app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
@@ -248,8 +235,6 @@ app.post("/generate-and-process", async (req, res) => {
     const outputDir = path.join(__dirname, "temp_outputs");
     tempInputPath = path.join(outputDir, "temp_input.mp3");
     outputPath = path.join(outputDir, "ling 2.aiff");
-    const bandFilePath = path.join(__dirname, "test.band");
-    const targetPath = path.join(bandFilePath, "Media", "ling 2.aiff");
 
     console.log("Ensuring temporary output directory exists...");
     await fs.ensureDir(outputDir);
@@ -289,52 +274,36 @@ app.post("/generate-and-process", async (req, res) => {
     });
     console.log("Audio converted to AIFF, trimmed, and processed successfully");
 
-    // Step 4: Replace file in .band package
-    console.log("Step 4: Replacing file in .band package...");
-    await replaceFileInBand(bandFilePath, outputPath, targetPath);
-
-    // Zip the modified .band file
-    console.log("Zipping .band package...");
-    const archive = archiver("zip", { zlib: { level: 9 } });
-    const zipStream = fs.createWriteStream("modified_test.band.zip");
-
-    archive.directory(bandFilePath, false);
-    archive.pipe(zipStream);
-
-    await new Promise((resolve, reject) => {
-      archive.on("error", reject);
-      zipStream.on("close", resolve);
-      archive.finalize();
-    });
-
-    // Send the zipped .band file to the client
-    console.log("Sending zipped .band file...");
-    res.download(
-      "modified_test.band.zip",
-      "modified_test.band.zip",
-      async (err) => {
-        if (err) {
-          console.error("Error sending file:", err);
-          if (!res.headersSent) {
-            res.status(500).send("An error occurred while sending the file.");
-          }
+    // Send the AIFF file to the client
+    console.log("Sending AIFF file...");
+    res.download(outputPath, "ling 2.aiff", async (err) => {
+      if (err) {
+        console.error("Error sending file:", err);
+        if (!res.headersSent) {
+          res.status(500).send("An error occurred while sending the file.");
         }
-        console.log("Zipped .band file sent successfully");
       }
-    );
+      console.log("AIFF file sent successfully");
+
+      // Clean up
+      try {
+        await fs.remove(tempInputPath);
+        await fs.remove(outputPath);
+        console.log("Cleanup completed.");
+      } catch (cleanupError) {
+        console.error("Error during cleanup:", cleanupError);
+      }
+    });
   } catch (error) {
     console.error("Error during processing:", error);
     if (!res.headersSent) {
       res.status(500).send("An error occurred during processing.");
     }
-  } finally {
-    // Clean up
+    // Clean up in case of error
     try {
       if (tempInputPath) await fs.remove(tempInputPath);
       if (outputPath && (await fs.pathExists(outputPath)))
         await fs.remove(outputPath);
-      if (await fs.pathExists("modified_test.band.zip"))
-        await fs.remove("modified_test.band.zip");
       console.log("Cleanup completed.");
     } catch (cleanupError) {
       console.error("Error during cleanup:", cleanupError);
