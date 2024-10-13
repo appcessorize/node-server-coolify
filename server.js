@@ -1,4 +1,4 @@
-require("dotenv").config({ path: "./local.env" });
+// require("dotenv").config({ path: "./local.env" });
 
 const express = require("express");
 const multer = require("multer");
