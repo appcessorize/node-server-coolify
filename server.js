@@ -1,4 +1,4 @@
-// require('dotenv').config({ path: './local.env' });
+require('dotenv').config({ path: './local.env' });
 
 const express = require("express");
 const multer = require("multer");
@@ -19,7 +19,11 @@ const upload = multer({ dest: "uploads/" });
 const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
 
-const requiredEnvVars = ["SUNO_API_KEY", "API_KEY_1", "API_KEY_2"];
+const requiredEnvVars = [
+  "SUNO_API_KEY",
+  "API_KEY_1",
+  "API_KEY_2",
+];
 
 function checkEnvVariables() {
   const missingVars = requiredEnvVars.filter(
@@ -92,27 +96,31 @@ async function generateLyrics(prompt) {
       }
     );
 
+    console.log("Lyrics generation response:", JSON.stringify(response.data, null, 2));
+
     const lyricsId = response.data.data.id;
     console.log("Lyrics generation ID:", lyricsId);
 
     // Poll for lyrics completion
     let lyrics = null;
     let attempts = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 20;
     const interval = 5000; // 5 seconds
 
     while (!lyrics && attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, interval));
-      const lyricsResponse = await axios.get(
-        `${SUNO_BASE_URL}/lyrics/${lyricsId}`,
-        {
-          headers: { "api-key": sunoApiKey },
-        }
-      );
+      console.log(`Polling for lyrics completion. Attempt ${attempts + 1}/${maxAttempts}`);
+      await new Promise(resolve => setTimeout(resolve, interval));
+      const lyricsResponse = await axios.get(`${SUNO_BASE_URL}/lyrics/${lyricsId}`, {
+        headers: { "api-key": sunoApiKey },
+      });
 
-      if (lyricsResponse.data.data.status === "complete") {
+      console.log("Lyrics status response:", JSON.stringify(lyricsResponse.data, null, 2));
+
+      if (lyricsResponse.data.data.status === 'complete') {
         lyrics = lyricsResponse.data.data.text;
         console.log("Generated Lyrics:", lyrics);
+      } else if (lyricsResponse.data.data.status === 'error') {
+        throw new Error(`Lyrics generation failed: ${lyricsResponse.data.data.error_message}`);
       }
 
       attempts++;
@@ -124,10 +132,7 @@ async function generateLyrics(prompt) {
 
     return lyrics;
   } catch (error) {
-    console.error(
-      "Error generating lyrics:",
-      error.response ? error.response.data : error.message
-    );
+    console.error("Error generating lyrics:", error.response ? error.response.data : error.message);
     throw error;
   }
 }
@@ -145,7 +150,7 @@ async function generateMusic(lyrics, prompt, duration = 29) {
         lyrics: lyrics,
         mv: "chirp-v3-5",
         duration: duration,
-        make_instrumental: false,
+        make_instrumental: false
       },
       {
         headers: {
@@ -166,10 +171,7 @@ async function generateMusic(lyrics, prompt, duration = 29) {
 
     return songIds;
   } catch (error) {
-    console.error(
-      "Error generating music:",
-      error.response ? error.response.data : error.message
-    );
+    console.error("Error generating music:", error.response ? error.response.data : error.message);
     throw error;
   }
 }
@@ -206,10 +208,7 @@ async function checkStatus(songIds) {
 
     return { allComplete, audioUrl };
   } catch (error) {
-    console.error(
-      "Error checking status:",
-      error.response ? error.response.data : error.message
-    );
+    console.error("Error checking status:", error.response ? error.response.data : error.message);
     return { allComplete: false, audioUrl: null };
   }
 }
@@ -276,8 +275,8 @@ async function trimAudio(inputPath, outputPath, duration) {
       .setStartTime(0)
       .setDuration(duration)
       .output(outputPath)
-      .on("end", resolve)
-      .on("error", reject)
+      .on('end', resolve)
+      .on('error', reject)
       .run();
   });
 }
@@ -425,15 +424,3 @@ const server = app.listen(PORT, () => {
     SUNO_API_KEY: !!process.env.SUNO_API_KEY,
     API_KEY_1: !!process.env.API_KEY_1,
     API_KEY_2: !!process.env.API_KEY_2,
-  });
-});
-
-server.on("error", (e) => {
-  if (e.code === "EADDRINUSE") {
-    console.log(
-      `Port ${PORT} is already in use. Please choose a different port.`
-    );
-  } else {
-    console.log("An error occurred:", e);
-  }
-});
