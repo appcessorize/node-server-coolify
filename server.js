@@ -9,18 +9,17 @@ const axios = require("axios");
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "10mb" })); // Added size limit
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// Environment variables configuration
 const openaiApiKey = process.env.OPENAI_API_KEY;
 const sunoApiKey = process.env.SUNO_API_KEY;
-const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2].filter(Boolean); // Filter out undefined keys
+const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2].filter(Boolean);
 const SUNO_BASE_URL = "https://api.sunoaiapi.com/api/v1/gateway";
 
 const requiredEnvVars = [
@@ -48,7 +47,6 @@ if (!checkEnvVariables()) {
 
 const openai = new OpenAI({ apiKey: openaiApiKey });
 
-// Enhanced audio conversion function with GarageBand-specific settings
 async function convertToGarageBandAIFF(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(inputPath, (err, metadata) => {
@@ -56,22 +54,20 @@ async function convertToGarageBandAIFF(inputPath, outputPath) {
         return reject(new Error(`Failed to probe input file: ${err.message}`));
       }
 
-      // Create the FFmpeg command with specific GarageBand settings
       const command = ffmpeg(inputPath)
         .setStartTime(3)
         .setDuration(28)
         .outputOptions([
-          "-f aiff", // Force AIFF format
-          "-acodec pcm_s16be", // 16-bit PCM big-endian (GarageBand requirement)
-          "-ar 44100", // 44.1kHz sample rate (GarageBand requirement)
-          "-ac 2", // Stereo (GarageBand requirement)
-          "-map_metadata -1", // Strip metadata
-          "-write_id3v2 0", // No ID3 tags
-          "-rf64 auto", // Support for large files
+          "-f aiff",
+          "-acodec pcm_s16be",
+          "-ar 44100",
+          "-ac 2",
+          "-map_metadata -1",
+          "-write_id3v2 0",
+          "-rf64 auto",
         ])
         .output(outputPath);
 
-      // Add progress monitoring
       let lastProgress = 0;
       command.on("progress", (progress) => {
         if (progress.percent && progress.percent - lastProgress >= 5) {
@@ -80,10 +76,8 @@ async function convertToGarageBandAIFF(inputPath, outputPath) {
         }
       });
 
-      // Handle completion
       command
         .on("end", async () => {
-          // Verify the output file
           try {
             await verifyAiffFile(outputPath);
             console.log("FFmpeg conversion completed and verified");
@@ -101,7 +95,6 @@ async function convertToGarageBandAIFF(inputPath, outputPath) {
   });
 }
 
-// New function to verify AIFF file
 async function verifyAiffFile(filePath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
@@ -114,7 +107,6 @@ async function verifyAiffFile(filePath) {
         return reject(new Error("No audio stream found in output file"));
       }
 
-      // Verify GarageBand requirements
       const issues = [];
       if (audio.sample_rate !== 44100) {
         issues.push(
@@ -141,7 +133,6 @@ async function verifyAiffFile(filePath) {
   });
 }
 
-// Enhanced music generation with retries
 async function generateMusic(lyrics, maxRetries = 3) {
   console.log("Generating music with Suno...");
   let lastError;
@@ -162,7 +153,7 @@ async function generateMusic(lyrics, maxRetries = 3) {
             "Content-Type": "application/json",
             "api-key": sunoApiKey,
           },
-          timeout: 30000, // 30 second timeout
+          timeout: 30000,
         }
       );
 
@@ -173,7 +164,7 @@ async function generateMusic(lyrics, maxRetries = 3) {
       lastError = error;
       console.error(`Attempt ${attempt} failed:`, error.message);
       if (attempt < maxRetries) {
-        const delay = attempt * 2000; // Exponential backoff
+        const delay = attempt * 2000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -184,9 +175,6 @@ async function generateMusic(lyrics, maxRetries = 3) {
   );
 }
 
-// The rest of your code remains the same, but with these important updates:
-
-// Update your main route handler to include proper cleanup and error handling
 app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
   const tempFiles = [];
@@ -205,7 +193,6 @@ app.post("/generate-and-process", async (req, res) => {
     const tempAiffPath = path.join(outputDir, `ringtone_${Date.now()}.aiff`);
     tempFiles.push(tempInputPath, tempAiffPath);
 
-    // Your existing generation code...
     const lyrics = await generateLyrics(validatedPrompt);
     const songIds = await generateMusic(lyrics);
     const audioUrl = await pollStatus(songIds);
@@ -213,25 +200,21 @@ app.post("/generate-and-process", async (req, res) => {
     await downloadFile(audioUrl, tempInputPath);
     await convertToGarageBandAIFF(tempInputPath, tempAiffPath);
 
-    // Verify file size
     const stats = await fs.stat(tempAiffPath);
     if (stats.size === 0) {
       throw new Error("Generated AIFF file is empty");
     }
 
-    // Set appropriate headers
     res.setHeader("Content-Type", "audio/x-aiff");
     res.setHeader(
       "Content-Disposition",
       'attachment; filename="ringtone.aiff"'
     );
 
-    // Stream the file instead of loading it into memory
     const fileStream = fs.createReadStream(tempAiffPath);
     fileStream.pipe(res);
 
     fileStream.on("end", async () => {
-      // Cleanup after successful streaming
       await cleanup(tempFiles);
     });
 
@@ -254,7 +237,6 @@ app.post("/generate-and-process", async (req, res) => {
   }
 });
 
-// Helper function for cleanup
 async function cleanup(files) {
   for (const file of files) {
     try {
@@ -268,7 +250,6 @@ async function cleanup(files) {
   }
 }
 
-// Server initialization with proper error handling
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
@@ -285,7 +266,6 @@ server.on("error", (e) => {
   }
 });
 
-// Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("Received SIGTERM. Performing graceful shutdown...");
   server.close(() => {
