@@ -199,7 +199,7 @@ async function generateMusic(lyrics, maxRetries = 3) {
       const response = await axios.post(
         `${SUNO_BASE_URL}/generate/music`,
         {
-          title: "ringtone",
+          title: "Ringtone",
           tags: "generated,ai,fun,ringtone,nointro",
           prompt:
             "[Make a ringtone with no intro, go straight into the lyrics][no intro]" +
