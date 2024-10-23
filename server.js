@@ -47,6 +47,63 @@ if (!checkEnvVariables()) {
 
 const openai = new OpenAI({ apiKey: openaiApiKey });
 
+// Input validation
+function validatePrompt(prompt) {
+  if (typeof prompt !== "string") {
+    throw new Error("Prompt must be a string");
+  }
+  if (prompt.length > 500) {
+    throw new Error("Prompt must be 500 characters or less");
+  }
+  return prompt.trim();
+}
+
+// Improved OpenAI lyrics generation with retry logic
+async function generateLyrics(prompt, maxRetries = 3) {
+  console.log("Generating lyrics with OpenAI...");
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Generate happy and fun song lyrics for a 30 second ringtone based on the following prompt. The song should be around 30 seconds long. It should be a fun ringtone about the person calling",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 1,
+        max_tokens: 256,
+        top_p: 1,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+      });
+
+      console.log("OpenAI Response:", JSON.stringify(response, null, 2));
+      const lyrics = response.choices[0].message.content;
+      console.log("Generated Lyrics:", lyrics);
+      return lyrics;
+    } catch (error) {
+      lastError = error;
+      console.error(`Attempt ${attempt} failed:`, error.message);
+      if (attempt < maxRetries) {
+        const delay = attempt * 2000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw new Error(
+    `Failed to generate lyrics after ${maxRetries} attempts: ${lastError.message}`
+  );
+}
+
 async function convertToGarageBandAIFF(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(inputPath, (err, metadata) => {
@@ -145,7 +202,8 @@ async function generateMusic(lyrics, maxRetries = 3) {
           title: "ringtone",
           tags: "generated,ai,fun,ringtone,nointro",
           prompt:
-            "[Make a song with no intro, go straight into the lyrics]" + lyrics,
+            "[Make a ringtone with no intro, go straight into the lyrics][no intro]" +
+            lyrics,
           mv: "chirp-v3-5",
         },
         {
@@ -173,6 +231,62 @@ async function generateMusic(lyrics, maxRetries = 3) {
   throw new Error(
     `Failed to generate music after ${maxRetries} attempts: ${lastError.message}`
   );
+}
+
+async function pollStatus(songIds, maxAttempts = 20, interval = 15000) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    console.log(`Status check attempt ${attempt + 1}/${maxAttempts}`);
+    try {
+      const response = await axios.get(`${SUNO_BASE_URL}/query`, {
+        params: { ids: songIds.join(",") },
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": sunoApiKey,
+        },
+      });
+
+      const allComplete = response.data.every(
+        (result) => result.status === "complete"
+      );
+      const audioUrl = response.data.find(
+        (result) => result.status === "complete"
+      )?.audio_url;
+
+      if (allComplete && audioUrl) {
+        console.log("Music generation complete!");
+        return audioUrl;
+      }
+
+      if (attempt < maxAttempts - 1) {
+        console.log(`Waiting ${interval / 1000} seconds before next check...`);
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      }
+    } catch (error) {
+      console.error(`Poll attempt ${attempt + 1} failed:`, error.message);
+      if (attempt < maxAttempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      }
+    }
+  }
+
+  throw new Error("Timeout: Music generation incomplete");
+}
+
+async function downloadFile(url, outputPath) {
+  const writer = fs.createWriteStream(outputPath);
+  const response = await axios({
+    url,
+    method: "GET",
+    responseType: "stream",
+    timeout: 30000,
+  });
+
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
 }
 
 app.post("/generate-and-process", async (req, res) => {
