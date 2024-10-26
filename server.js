@@ -47,22 +47,6 @@ if (!checkEnvVariables()) {
 
 const openai = new OpenAI({ apiKey: openaiApiKey });
 
-function validateApiKey(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(401).json({ error: "No API key provided" });
-  }
-
-  const apiKey = authHeader.split("Bearer ")[1];
-
-  if (!apiKey || !API_KEYS.includes(apiKey)) {
-    return res.status(401).json({ error: "Invalid API key" });
-  }
-
-  next();
-}
-
 // Input validation
 function validatePrompt(prompt) {
   if (typeof prompt !== "string") {
@@ -305,39 +289,48 @@ async function downloadFile(url, outputPath) {
   });
 }
 
-app.post("/generate-music-url", validateApiKey, async (req, res) => {
+app.post("/generate-music-url", async (req, res) => {
   console.log("Starting the generate-music-url workflow...");
+
   try {
     const { prompt } = req.body;
+    const apiKey = req.headers["x-api-key"];
+
+    if (!apiKey || !API_KEYS.includes(apiKey)) {
+      return res.status(401).json({ error: "Invalid API key" });
+    }
+
     if (!prompt) {
       throw new Error("Prompt is required");
     }
     const validatedPrompt = validatePrompt(prompt);
 
-    // Generate lyrics using existing function
     const lyrics = await generateLyrics(validatedPrompt);
-
-    // Generate music using existing function
     const songIds = await generateMusic(lyrics);
-
-    // Return URL immediately using the first song ID
     const audioUrl = `https://cdn1.suno.ai/${songIds[0]}.mp3`;
+
     res.json({ url: audioUrl });
   } catch (error) {
     console.error("Processing error:", error);
     res.status(500).json({
       error: "Processing failed",
-      message: error.message,
+      details: error.message,
     });
   }
 });
 
-app.post("/generate-and-process", validateApiKey, async (req, res) => {
+app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
   const tempFiles = [];
 
   try {
     const { prompt } = req.body;
+    const apiKey = req.headers["x-api-key"];
+
+    if (!apiKey || !API_KEYS.includes(apiKey)) {
+      return res.status(401).json({ error: "Invalid API key" });
+    }
+
     if (!prompt) {
       throw new Error("Prompt is required");
     }
