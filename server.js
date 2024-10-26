@@ -51,7 +51,7 @@ app.get("/health", (req, res) => {
 // Test Endpoint
 app.get("/", (req, res) => {
   console.log("Test endpoint hit");
-  res.send("Server is running. updated! shorter timeout");
+  res.send("Server is running. updated! shorter timeout.checkstatus updated");
 });
 
 // Implement Input validation
@@ -148,6 +148,7 @@ async function generateMusic(lyrics) {
 }
 
 // Function to check the status of generated songs
+// Function to check the status of generated songs
 async function checkStatus(songIds, returnFirstAvailable = false) {
   try {
     const response = await axios.get(`${SUNO_BASE_URL}/query`, {
@@ -161,30 +162,84 @@ async function checkStatus(songIds, returnFirstAvailable = false) {
     const results = response.data;
     let allComplete = true;
     let audioUrl = null;
+    let currentStatus = "queued";
 
     for (const result of results) {
       console.log("Song ID:", result.id);
       console.log("Status:", result.status);
+
+      // Update status based on current song
+      if (result.status === "streaming" && currentStatus === "queued") {
+        currentStatus = "streaming";
+      }
+
       if (result.status === "complete") {
         console.log("Audio URL:", result.audio_url);
         audioUrl = result.audio_url;
+        currentStatus = "complete";
         if (returnFirstAvailable) {
-          return { allComplete: true, audioUrl };
+          console.log("First available URL found:", audioUrl);
+          return { allComplete: true, audioUrl, status: currentStatus };
         }
       } else if (result.status === "error") {
         console.log("Error:", result.meta_data.error_message);
         allComplete = false;
+        currentStatus = "error";
       } else {
         allComplete = false;
       }
       console.log("---");
     }
 
-    return { allComplete, audioUrl };
+    // Log overall status
+    console.log("Current overall status:", currentStatus);
+
+    return {
+      allComplete,
+      audioUrl,
+      status: currentStatus,
+    };
   } catch (error) {
     console.error("Error checking status:", error);
-    return { allComplete: false, audioUrl: null };
+    return {
+      allComplete: false,
+      audioUrl: null,
+      status: "error",
+    };
   }
+}
+
+// Function to poll status until complete or max attempts reached
+async function pollStatus(songIds, returnFirstAvailable = false) {
+  const interval = returnFirstAvailable ? 5000 : 15000; // 5 seconds for URL, 15 seconds for processing
+  const maxAttempts = returnFirstAvailable ? 60 : 20; // 60 attempts for URL (5 mins total), 20 for processing (5 mins total)
+  let attempts = 0;
+
+  while (attempts < maxAttempts) {
+    console.log(`Attempt ${attempts + 1} to check status...`);
+    const { allComplete, audioUrl, status } = await checkStatus(
+      songIds,
+      returnFirstAvailable
+    );
+
+    if (audioUrl && (returnFirstAvailable || allComplete)) {
+      console.log(
+        returnFirstAvailable
+          ? "First song is complete!"
+          : "All songs are complete!"
+      );
+      return audioUrl;
+    }
+
+    attempts++;
+    if (attempts < maxAttempts) {
+      console.log(`Waiting ${interval / 1000} seconds before next check...`);
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+  }
+
+  console.log("Max attempts reached. Some songs may not be complete.");
+  throw new Error("Timeout: Music generation incomplete");
 }
 
 // Function to poll status until complete or max attempts reached
