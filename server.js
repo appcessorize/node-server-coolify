@@ -51,7 +51,7 @@ app.get("/health", (req, res) => {
 // Test Endpoint
 app.get("/", (req, res) => {
   console.log("Test endpoint hit");
-  res.send("Server is running. updated with new endpoint");
+  res.send("Server is running. updated! shorter timeout");
 });
 
 // Implement Input validation
@@ -126,7 +126,8 @@ async function generateMusic(lyrics) {
         title: "ringtone",
         tags: "generated, ai,fun,ringtone,nointro",
         prompt:
-          "Make a song with no intro, go straight into the lyrics. " + lyrics,
+          "[Make a ringtone with no intro, go straight into the lyrics] [no intro]" +
+          lyrics,
         mv: "chirp-v3-5",
       },
       {
@@ -147,7 +148,7 @@ async function generateMusic(lyrics) {
 }
 
 // Function to check the status of generated songs
-async function checkStatus(songIds) {
+async function checkStatus(songIds, returnFirstAvailable = false) {
   try {
     const response = await axios.get(`${SUNO_BASE_URL}/query`, {
       params: { ids: songIds.join(",") },
@@ -161,12 +162,15 @@ async function checkStatus(songIds) {
     let allComplete = true;
     let audioUrl = null;
 
-    results.forEach((result) => {
+    for (const result of results) {
       console.log("Song ID:", result.id);
       console.log("Status:", result.status);
       if (result.status === "complete") {
         console.log("Audio URL:", result.audio_url);
         audioUrl = result.audio_url;
+        if (returnFirstAvailable) {
+          return { allComplete: true, audioUrl };
+        }
       } else if (result.status === "error") {
         console.log("Error:", result.meta_data.error_message);
         allComplete = false;
@@ -174,7 +178,7 @@ async function checkStatus(songIds) {
         allComplete = false;
       }
       console.log("---");
-    });
+    }
 
     return { allComplete, audioUrl };
   } catch (error) {
@@ -184,17 +188,25 @@ async function checkStatus(songIds) {
 }
 
 // Function to poll status until complete or max attempts reached
-async function pollStatus(songIds) {
-  const interval = 15000; // 15 seconds
-  const maxAttempts = 20;
+async function pollStatus(songIds, returnFirstAvailable = false) {
+  // Use different polling settings based on the endpoint
+  const interval = returnFirstAvailable ? 5000 : 15000; // 5 seconds for URL, 15 seconds for processing
+  const maxAttempts = returnFirstAvailable ? 60 : 20; // 60 attempts for URL (5 mins total), 20 for processing (5 mins total)
   let attempts = 0;
 
   while (attempts < maxAttempts) {
     console.log(`Attempt ${attempts + 1} to check status...`);
-    const { allComplete, audioUrl } = await checkStatus(songIds);
+    const { allComplete, audioUrl } = await checkStatus(
+      songIds,
+      returnFirstAvailable
+    );
 
-    if (allComplete && audioUrl) {
-      console.log("All songs are complete!");
+    if (audioUrl && (returnFirstAvailable || allComplete)) {
+      console.log(
+        returnFirstAvailable
+          ? "First song is complete!"
+          : "All songs are complete!"
+      );
       return audioUrl;
     }
 
@@ -224,7 +236,7 @@ async function downloadFile(url, outputPath) {
   });
 }
 
-// New generate-url endpoint
+// Generate URL endpoint
 app.post("/generate-url", async (req, res) => {
   console.log("Starting the generate-url workflow...");
   try {
@@ -239,9 +251,9 @@ app.post("/generate-url", async (req, res) => {
     console.log("Step 2: Generating music...");
     const songIds = await generateMusic(lyrics);
 
-    // Wait for music generation to complete and get audio URL
-    console.log("Waiting for music generation to complete...");
-    const audioUrl = await pollStatus(songIds);
+    // Wait for first available URL
+    console.log("Waiting for first available URL...");
+    const audioUrl = await pollStatus(songIds, true);
 
     // Return the URL to the client
     console.log("Returning audio URL to client...");
