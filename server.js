@@ -51,7 +51,7 @@ app.get("/health", (req, res) => {
 // Test Endpoint
 app.get("/", (req, res) => {
   console.log("Test endpoint hit");
-  res.send("Server is running. updated");
+  res.send("Server is running. updated with new endpoint");
 });
 
 // Implement Input validation
@@ -224,7 +224,39 @@ async function downloadFile(url, outputPath) {
   });
 }
 
-// Main route for processing
+// New generate-url endpoint
+app.post("/generate-url", async (req, res) => {
+  console.log("Starting the generate-url workflow...");
+  try {
+    const { prompt } = req.body;
+    const validatedPrompt = validatePrompt(prompt);
+
+    // Step 1: Generate lyrics with OpenAI
+    console.log("Step 1: Generating lyrics...");
+    const lyrics = await generateLyrics(validatedPrompt);
+
+    // Step 2: Generate music with Suno using the lyrics
+    console.log("Step 2: Generating music...");
+    const songIds = await generateMusic(lyrics);
+
+    // Wait for music generation to complete and get audio URL
+    console.log("Waiting for music generation to complete...");
+    const audioUrl = await pollStatus(songIds);
+
+    // Return the URL to the client
+    console.log("Returning audio URL to client...");
+    res.json({ url: audioUrl });
+  } catch (error) {
+    console.error("Error during processing:", error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "An error occurred during processing.",
+        message: error.message,
+      });
+    }
+  }
+});
+
 app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
   let tempInputPath, outputPath;
