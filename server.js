@@ -52,7 +52,7 @@ app.get("/health", (req, res) => {
 app.get("/", (req, res) => {
   console.log("Test endpoint hit");
   res.send(
-    "Server is running. updated! shorter timeout.checkstatus updated.tags/no intro"
+    "Server is running. updated! shorter timeout.checkstatus updated.tags/no intro/new"
   );
 });
 
@@ -126,9 +126,9 @@ async function generateMusic(lyrics) {
       `${SUNO_BASE_URL}/generate/music`,
       {
         title: "friends ringtone",
-        tags: "Energetic, Catchy, Fun,Pop, Electronic, nointro",
+        tags: "Energetic, Catchy, Fun,Pop, Electronic",
         prompt:
-          "[GENRES: Pop, Electronic][SOUNDS LIKE: Energetic, Catchy, Fun][STYLE: Upbeat, Cheerful][[MOOD: Playful, Friendly, Memorable][[INSTRUMENTATION: Synth, Light percussion][[TEMPO: Medium, 120 BPM][[PRODUCTION: Crisp, Bright, Polished][DYNAMICS: Quick rhythm, Steady pulse][[EMOTIONS: Joy, Friendship, Energy][no intro][STRUCTURE:start with chorus]" +
+          "[GENRES: Pop, Electronic][SOUNDS LIKE: Energetic, Catchy, Fun][STYLE: Upbeat, Cheerful][[MOOD: Playful, Friendly, Memorable][[INSTRUMENTATION: Synth, Light percussion][[TEMPO: Medium, 120 BPM][[PRODUCTION: Crisp, Bright, Polished][DYNAMICS: Quick rhythm, Steady pulse][[EMOTIONS: Joy, Friendship, Energy][STRUCTURE:start with chorus]" +
           lyrics,
         mv: "chirp-v3-5",
       },
