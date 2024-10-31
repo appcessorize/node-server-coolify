@@ -51,7 +51,9 @@ app.get("/health", (req, res) => {
 // Test Endpoint
 app.get("/", (req, res) => {
   console.log("Test endpoint hit");
-  res.send("Server is running. updated! shorter timeout.checkstatus updated");
+  res.send(
+    "Server is running. updated! shorter timeout.checkstatus updated.tags"
+  );
 });
 
 // Implement Input validation
@@ -123,10 +125,10 @@ async function generateMusic(lyrics) {
     const response = await axios.post(
       `${SUNO_BASE_URL}/generate/music`,
       {
-        title: "ringtone",
-        tags: "generated, ai,fun,ringtone,nointro",
+        title: "friends ringtone",
+        tags: "Energetic, Catchy, Fun,Pop, Electronic",
         prompt:
-          "[Make a ringtone with no intro, go straight into the lyrics] [no intro]" +
+          "[GENRES: Pop, Electronic][SOUNDS LIKE: Energetic, Catchy, Fun][STYLE: Upbeat, Cheerful][[MOOD: Playful, Friendly, Memorable][[INSTRUMENTATION: Synth, Light percussion][[TEMPO: Medium, 120 BPM][[PRODUCTION: Crisp, Bright, Polished][DYNAMICS: Quick rhythm, Steady pulse][[EMOTIONS: Joy, Friendship, Energy] [no intro]" +
           lyrics,
         mv: "chirp-v3-5",
       },
