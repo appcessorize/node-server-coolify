@@ -126,7 +126,7 @@ async function generateDailySongLyrics(prompt) {
         {
           role: "system",
           content:
-            "Generate happy and fun song lyrics for a 30 second ringtone based on the following prompt. The song should be around 30 seconds long. It should be a fun ringtone about the person calling",
+            "Generate happy and fun song lyrics for a song based on the following prompt.  It should be a fun song about the listeners upcoming day. it uses the following info from their calendar, the weather, headlines from the BBC. please make the lyrics fun and engaging",
         },
         {
           role: "user",
@@ -156,10 +156,10 @@ async function generateDailySongMusic(lyrics) {
     const response = await axios.post(
       `${SUNO_BASE_URL}/generate/music`,
       {
-        title: "friends ringtone",
+        title: "my daily song",
         tags: "Energetic, Catchy, Fun,Pop, Electronic",
         prompt:
-          "[GENRES: Pop, Electronic][SOUNDS LIKE: Energetic, Catchy, Fun][STYLE: Upbeat, Cheerful][[MOOD: Playful, Friendly, Memorable][[INSTRUMENTATION: Synth, Light percussion][[TEMPO: Medium, 120 BPM][[PRODUCTION: Crisp, Bright, Polished][DYNAMICS: Quick rhythm, Steady pulse][[EMOTIONS: Joy, Friendship, Energy][STRUCTURE:start with chorus]" +
+          "[GENRES: Pop, Electronic][SOUNDS LIKE: Energetic, Catchy, Fun][STYLE: Upbeat, Cheerful][[MOOD: Playful, Friendly, Memorable][[INSTRUMENTATION: Synth, Light percussion][[TEMPO: Medium, 120 BPM][[PRODUCTION: Crisp, Bright, Polished][DYNAMICS: Quick rhythm, Steady pulse][[EMOTIONS: Joy, Friendship, Energy][STRUCTURE:start with chorus] [make a song that sets the listener up for their day]" +
           lyrics,
         mv: "chirp-v3-5",
       },
@@ -353,9 +353,7 @@ async function downloadFile(url, outputPath) {
     writer.on("error", reject);
   });
 }
-
-// Generate URL endpoint
-app.post("/generate-url", async (req, res) => {
+app.post("/generate-daily-song-url", async (req, res) => {
   console.log("Starting the generate-url workflow...");
   try {
     const { prompt } = req.body;
@@ -363,11 +361,11 @@ app.post("/generate-url", async (req, res) => {
 
     // Step 1: Generate lyrics with OpenAI
     console.log("Step 1: Generating lyrics...");
-    const lyrics = await generateLyrics(validatedPrompt);
+    const lyrics = await generateDailySongLyrics(validatedPrompt);
 
     // Step 2: Generate music with Suno using the lyrics
     console.log("Step 2: Generating music...");
-    const songIds = await generateMusic(lyrics);
+    const songIds = await generateDailySongMusic(lyrics);
 
     // Wait for first available URL
     console.log("Waiting for first available URL...");
@@ -386,8 +384,8 @@ app.post("/generate-url", async (req, res) => {
     }
   }
 });
-
-app.post("/generate-daily-song-url", async (req, res) => {
+// Generate URL endpoint
+app.post("/generate-url", async (req, res) => {
   console.log("Starting the generate-url workflow...");
   try {
     const { prompt } = req.body;
@@ -395,11 +393,11 @@ app.post("/generate-daily-song-url", async (req, res) => {
 
     // Step 1: Generate lyrics with OpenAI
     console.log("Step 1: Generating lyrics...");
-    const lyrics = await generateDailySongLyrics(validatedPrompt);
+    const lyrics = await generateLyrics(validatedPrompt);
 
     // Step 2: Generate music with Suno using the lyrics
     console.log("Step 2: Generating music...");
-    const songIds = await generateDailySongMusic(lyrics);
+    const songIds = await generateMusic(lyrics);
 
     // Wait for first available URL
     console.log("Waiting for first available URL...");
