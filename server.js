@@ -117,6 +117,39 @@ async function generateLyrics(prompt) {
     throw error;
   }
 }
+
+async function generateMusicIdeasLyrics(prompt) {
+  console.log("Generating lyrics with OpenAI...");
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate happy and fun song lyrics for a song based on the following prompt.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 1,
+      max_tokens: 256,
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    });
+
+    console.log("OpenAI Response:", JSON.stringify(response, null, 2));
+    const lyrics = response.choices[0].message.content;
+    console.log("NEW Generated Lyrics:", lyrics);
+    return lyrics;
+  } catch (error) {
+    console.error("Error generating lyrics:", error);
+    throw error;
+  }
+}
 async function generateDailySongLyrics(prompt) {
   console.log("Generating lyrics with OpenAI...");
   try {
@@ -210,6 +243,35 @@ async function generateMusic(lyrics) {
   }
 }
 
+async function generateMusicIdeasMusic(lyrics) {
+  console.log("Generating music with Suno...");
+  try {
+    const response = await axios.post(
+      `${SUNO_BASE_URL}/generate/music`,
+      {
+        title: "Song",
+        tags: "Energetic, Catchy, Fun,Duet, Broadway",
+        prompt:
+          "[GENRES: Broadway, Musical Theater][STYLE: Theatrical, Emotional, Narrative][MOOD: Hopeful, Romantic, Dramatic][VOCALS: Male & Female, Dynamic, Harmonious][ARRANGEMENT: Moderate Tempo, Orchestral][INSTRUMENTATION: Piano, Strings, Woodwinds, Subtle Percussion][TEMPO: 90-110 BPM][PRODUCTION: Dramatic, Warm Tones, Layered Vocals][STRUCTURE: Intro, Verse, Chorus, Verse, Bridge, Chorus, Finale][DYNAMICS: Rising Tension, Climactic Crescendo][EMOTIONS: Love, Fate, Connection]" +
+          lyrics,
+        mv: "chirp-v3-5",
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": sunoApiKey,
+        },
+      }
+    );
+
+    const songIds = response.data.data.map((song) => song.song_id);
+    console.log("Generated song IDs:", songIds);
+    return songIds;
+  } catch (error) {
+    console.error("Error generating music:", error);
+    throw error;
+  }
+}
 // Function to check the status of generated songs
 // Function to check the status of generated songs
 async function checkStatus(songIds, returnFirstAvailable = false) {
@@ -398,6 +460,38 @@ app.post("/generate-url", async (req, res) => {
     // Step 2: Generate music with Suno using the lyrics
     console.log("Step 2: Generating music...");
     const songIds = await generateMusic(lyrics);
+
+    // Wait for first available URL
+    console.log("Waiting for first available URL...");
+    const audioUrl = await pollStatus(songIds, true);
+
+    // Return the URL to the client
+    console.log("Returning audio URL to client...");
+    res.json({ url: audioUrl });
+  } catch (error) {
+    console.error("Error during processing:", error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "An error occurred during processing.",
+        message: error.message,
+      });
+    }
+  }
+});
+
+app.post("/generate-url-music-ideas", async (req, res) => {
+  console.log("Starting the generate-url workflow...");
+  try {
+    const { prompt } = req.body;
+    const validatedPrompt = validatePrompt(prompt);
+
+    // Step 1: Generate lyrics with OpenAI
+    console.log("Step 1: Generating lyrics...");
+    const lyrics = await generateMusicIdeasLyrics(validatedPrompt);
+
+    // Step 2: Generate music with Suno using the lyrics
+    console.log("Step 2: Generating music...");
+    const songIds = await generateMusicIdeasMusic(lyrics);
 
     // Wait for first available URL
     console.log("Waiting for first available URL...");
