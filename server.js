@@ -66,7 +66,15 @@ function validatePrompt(prompt) {
   }
   return prompt.trim();
 }
-
+function validateMusicIdeasPrompt(prompt) {
+  if (typeof prompt !== "string") {
+    throw new Error("Prompt must be a string");
+  }
+  if (prompt.length > 5000) {
+    throw new Error("Prompt must be 500 characters or less");
+  }
+  return prompt.trim();
+}
 // API key middleware
 function apiKeyAuth(req, res, next) {
   const apiKey = req.header("X-API-Key");
@@ -483,7 +491,7 @@ app.post("/generate-url-music-ideas", async (req, res) => {
   console.log("Starting the generate-url workflow...");
   try {
     const { prompt } = req.body;
-    const validatedPrompt = validatePrompt(prompt);
+    const validatedPrompt = validateMusicIdeasPrompt(prompt);
 
     // Step 1: Generate lyrics with OpenAI
     console.log("Step 1: Generating lyrics...");
