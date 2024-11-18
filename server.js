@@ -260,7 +260,7 @@ async function generateMusicIdeasMusic(lyrics) {
         title: "Song",
         tags: "Energetic, Catchy, Fun,Duet, Broadway",
         prompt:
-          "[GENRES: Broadway, Musical Theater][STYLE: Theatrical, Emotional, Narrative][MOOD: Hopeful, Romantic, Dramatic][VOCALS: Male & Female, Dynamic, Harmonious][ARRANGEMENT: Moderate Tempo, Orchestral][INSTRUMENTATION: Piano, Strings, Woodwinds, Subtle Percussion][TEMPO: 90-110 BPM][PRODUCTION: Dramatic, Warm Tones, Layered Vocals][STRUCTURE: Intro, Verse, Chorus, Verse, Bridge, Chorus, Finale][DYNAMICS: Rising Tension, Climactic Crescendo][EMOTIONS: Love, Fate, Connection]" +
+          "[GENRES: Broadway, Musical Theater][vocal add ons][Duet][Duet with Male and female singer]" +
           lyrics,
         mv: "chirp-v3-5",
       },
