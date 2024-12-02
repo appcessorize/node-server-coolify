@@ -1,3 +1,5 @@
+require("dotenv").config({ path: ".env.local" });
+
 const express = require("express");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
@@ -25,6 +27,7 @@ const requiredEnvVars = [
   "SUNO_API_KEY",
   "API_KEY_1",
   "API_KEY_2",
+  "MINIMAXI_API_KEY",
 ];
 
 function checkEnvVariables() {
@@ -93,8 +96,6 @@ app.use((req, res, next) => {
   }
   return apiKeyAuth(req, res, next);
 });
-
-// Function to generate lyrics using OpenAI
 async function generateLyrics(prompt) {
   console.log("Generating lyrics with OpenAI...");
   try {
@@ -104,7 +105,7 @@ async function generateLyrics(prompt) {
         {
           role: "system",
           content:
-            "Generate happy and fun song lyrics for a 30 second ringtone based on the following prompt. The song should be around 30 seconds long. It should be a fun ringtone about the person calling",
+            "Generate very short, fun song lyrics (6 lines maximum) for a ringtone based on the following prompt. Keep it brief and catchy.",
         },
         {
           role: "user",
@@ -112,7 +113,40 @@ async function generateLyrics(prompt) {
         },
       ],
       temperature: 1,
-      max_tokens: 256,
+      max_tokens: 100,
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    });
+
+    console.log("OpenAI Response:", JSON.stringify(response, null, 2));
+    const lyrics = response.choices[0].message.content;
+    console.log("NEW Generated Lyrics:", lyrics);
+    return lyrics;
+  } catch (error) {
+    console.error("Error generating lyrics:", error);
+    throw error;
+  }
+}
+// Function to generate lyrics using OpenAI
+async function generateMiniMaxiLyrics(prompt) {
+  console.log("Generating lyrics with OpenAI...");
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate fun song lyrics (8 lines maximum) for a ringtone based on the following prompt. Keep it brief and catchy.Make the lyric excellent and memorable. Make it a fun ringtone. dont include any other instructions such as (chorus) or [GENRES: etc] just return the lyrics. Generate happy and fun song lyrics for a 30 second ringtone based on the following prompt. The song should be around 30 seconds long. It should be a fun ringtone about the person calling",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 1,
+      max_tokens: 100,
       top_p: 1,
       frequency_penalty: 0,
       presence_penalty: 0,
@@ -551,6 +585,16 @@ async function generateMiniMaxiMusic(params) {
       data: formData,
     });
 
+    // Add detailed logging of the response
+    console.log("\nFull API Response:", JSON.stringify(response.data, null, 2));
+    console.log("\nResponse Structure:");
+    console.log("Status:", response.status);
+    console.log("Headers:", response.headers);
+    console.log("Data keys:", Object.keys(response.data));
+    if (response.data.data) {
+      console.log("Data.data keys:", Object.keys(response.data.data));
+    }
+
     if (response.data && response.data.data && response.data.data.audio) {
       return {
         message: "Music generated successfully",
@@ -559,28 +603,49 @@ async function generateMiniMaxiMusic(params) {
         lyrics: params.lyrics,
       };
     } else {
-      throw new Error("No audio data in response");
+      // Add more detailed error information
+      const errorMsg = `No audio data in response. Response structure: ${JSON.stringify(
+        response.data
+      )}`;
+      throw new Error(errorMsg);
     }
   } catch (error) {
     console.error("\n=== Error in Music Generation ===");
     console.error("Error Type:", error.constructor.name);
     console.error("Error Message:", error.message);
+    if (error.response) {
+      console.error("Response Status:", error.response.status);
+      console.error("Response Data:", error.response.data);
+    }
     throw error;
   }
 }
 
-// Add this route to your existing routes
+// Add a validation function for MiniMaxi lyrics
+function validateMiniMaxiLyrics(lyrics) {
+  const maxLength = 500; // Adjust this value based on MiniMaxi's requirements
+  if (lyrics.length > maxLength) {
+    // Truncate lyrics if too long
+    return lyrics.substring(0, maxLength);
+  }
+  return lyrics;
+}
+
+// Update the generate-mini-maxi endpoint
 app.post("/generate-mini-maxi", async (req, res) => {
   console.log("Starting the MiniMaxi music generation workflow...");
   try {
     const { prompt } = req.body;
-
-    // Validate the prompt
     const validatedPrompt = validatePrompt(prompt);
 
     // Step 1: Generate lyrics with OpenAI
     console.log("Step 1: Generating lyrics...");
-    const lyrics = await generateLyrics(validatedPrompt);
+    let lyrics = await generateMiniMaxiLyrics(validatedPrompt + "##\n");
+
+    // Validate and truncate lyrics if necessary
+    lyrics = validateMiniMaxiLyrics(lyrics);
+    console.log("Validated lyrics length:", lyrics.length);
+    console.log("Final lyrics:", lyrics);
 
     // Step 2: Prepare MiniMaxi generation parameters
     const miniMaxiParams = {
@@ -595,7 +660,7 @@ app.post("/generate-mini-maxi", async (req, res) => {
 
     // Return the result to the client
     console.log("Returning music generation result to client...");
-    res.json({
+    res.status(200).json({
       message: result.message,
       audioHex: result.audioHex,
       extraInfo: result.extraInfo,
@@ -609,6 +674,9 @@ app.post("/generate-mini-maxi", async (req, res) => {
         message: error.message,
       });
     }
+  } finally {
+    // Log completion of request
+    console.log("MiniMaxi request completed");
   }
 });
 app.post("/generate-and-process", async (req, res) => {
