@@ -6,6 +6,7 @@ const path = require("path");
 const cors = require("cors");
 const OpenAI = require("openai");
 const axios = require("axios");
+const FormData = require("form-data");
 
 const app = express();
 app.use(cors());
@@ -524,7 +525,7 @@ async function generateMiniMaxiMusic(params) {
     console.log("\n=== Starting Music Generation ===");
     console.log("Request Parameters:", params);
 
-    // Create form data
+    // Create form data using the form-data package
     const formData = new FormData();
     formData.append("refer_voice", params.voiceId);
     formData.append("refer_instrumental", params.instrumentalId);

@@ -412,6 +412,34 @@ app.post("/generate-and-process", async (req, res) => {
   }
 });
 
+app.post("/mini-max", async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    const validatedPrompt = validatePrompt(prompt);
+
+    // Generate lyrics with OpenAI
+    const lyrics = await generateLyrics(validatedPrompt);
+
+    // Generate music with Suno
+    const songIds = await generateMusic(lyrics);
+
+    // Get the audio URL
+    const audioUrl = await pollStatus(songIds, true);
+
+    res.json({
+      success: true,
+      audioUrl,
+      lyrics,
+    });
+  } catch (error) {
+    console.error("Error in mini-max route:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "An error occurred during processing",
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
