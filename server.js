@@ -17,7 +17,7 @@ const upload = multer({ dest: "uploads/" });
 const openaiApiKey = process.env.OPENAI_API_KEY;
 const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
-
+const MINIMAXI_API_KEY = process.env.MINIMAXI_API_KEY;
 const requiredEnvVars = [
   "OPENAI_API_KEY",
   "SUNO_API_KEY",
@@ -518,7 +518,116 @@ app.post("/generate-url-music-ideas", async (req, res) => {
     }
   }
 });
+// Add this function to your existing server code
+async function generateMiniMaxiMusic(params) {
+  try {
+    console.log("\n=== Starting Music Generation ===");
+    console.log("Request Parameters:", params);
 
+    // Create form data
+    const formData = new FormData();
+    formData.append("refer_voice", params.voiceId);
+    formData.append("refer_instrumental", params.instrumentalId);
+    formData.append("lyrics", params.lyrics);
+    formData.append("model", "music-01");
+    formData.append(
+      "audio_setting",
+      JSON.stringify({
+        sample_rate: 44100,
+        bitrate: 256000,
+        format: "mp3",
+      })
+    );
+
+    console.log("\nMaking music generation request...");
+    const response = await axios({
+      method: "post",
+      url: "https://api.minimaxi.chat/v1/music_generation",
+      headers: {
+        Authorization: `Bearer ${MINIMAXI_API_KEY}`,
+        ...formData.getHeaders(),
+      },
+      data: formData,
+    });
+
+    console.log("\nResponse received:");
+    console.log("Status:", response.status);
+
+    if (response.data && response.data.data && response.data.data.audio) {
+      console.log("\nProcessing audio data...");
+
+      // Convert hex string to buffer
+      const audioBuffer = Buffer.from(response.data.data.audio, "hex");
+      console.log("Audio buffer size:", audioBuffer.length, "bytes");
+
+      // Save to file
+      const outputPath = `./output_${Date.now()}.mp3`;
+      fs.writeFileSync(outputPath, audioBuffer);
+
+      const stats = fs.statSync(outputPath);
+      console.log("\nFile saved successfully:");
+      console.log("Path:", outputPath);
+      console.log("Size:", stats.size, "bytes");
+
+      return {
+        message: "Music generated successfully",
+        outputPath,
+        fileSize: stats.size,
+        extraInfo: response.data.extra_info,
+      };
+    } else {
+      throw new Error("No audio data in response");
+    }
+  } catch (error) {
+    console.error("\n=== Error in Music Generation ===");
+    console.error("Error Type:", error.constructor.name);
+    console.error("Error Message:", error.message);
+    throw error;
+  }
+}
+
+// Add this route to your existing routes
+app.post("/generate-mini-maxi", async (req, res) => {
+  console.log("Starting the MiniMaxi music generation workflow...");
+  try {
+    const { prompt } = req.body;
+
+    // Validate the prompt
+    const validatedPrompt = validatePrompt(prompt);
+
+    // Step 1: Generate lyrics with OpenAI
+    console.log("Step 1: Generating lyrics...");
+    const lyrics = await generateLyrics(validatedPrompt);
+
+    // Step 2: Prepare MiniMaxi generation parameters
+    const miniMaxiParams = {
+      voiceId: "vocal-2024112413150824-aj4GKzSM", // Default voice ID
+      instrumentalId: "instrumental-2024112413150824-UE4jIGJY", // Default instrumental ID
+      lyrics: lyrics,
+    };
+
+    // Step 3: Generate music with MiniMaxi
+    console.log("Step 2: Generating music with MiniMaxi...");
+    const result = await generateMiniMaxiMusic(miniMaxiParams);
+
+    // Return the result to the client
+    console.log("Returning music generation result to client...");
+    res.json({
+      message: result.message,
+      filePath: result.outputPath,
+      fileSize: result.fileSize,
+      extraInfo: result.extraInfo,
+    });
+  } catch (error) {
+    console.error("Error during MiniMaxi music generation:", error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "An error occurred during MiniMaxi music generation",
+        message: error.message,
+      });
+    }
+  }
+});
 app.post("/generate-and-process", async (req, res) => {
   console.log("Starting the generate-and-process workflow...");
   let tempInputPath, outputPath;
