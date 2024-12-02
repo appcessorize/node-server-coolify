@@ -11,6 +11,7 @@ const FormData = require("form-data");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use("/outputs", express.static("outputs")); // Serve the outputs directory statically
 
 const upload = multer({ dest: "uploads/" });
 
@@ -525,7 +526,6 @@ async function generateMiniMaxiMusic(params) {
     console.log("\n=== Starting Music Generation ===");
     console.log("Request Parameters:", params);
 
-    // Create form data using the form-data package
     const formData = new FormData();
     formData.append("refer_voice", params.voiceId);
     formData.append("refer_instrumental", params.instrumentalId);
@@ -551,30 +551,12 @@ async function generateMiniMaxiMusic(params) {
       data: formData,
     });
 
-    console.log("\nResponse received:");
-    console.log("Status:", response.status);
-
     if (response.data && response.data.data && response.data.data.audio) {
-      console.log("\nProcessing audio data...");
-
-      // Convert hex string to buffer
-      const audioBuffer = Buffer.from(response.data.data.audio, "hex");
-      console.log("Audio buffer size:", audioBuffer.length, "bytes");
-
-      // Save to file
-      const outputPath = `./output_${Date.now()}.mp3`;
-      fs.writeFileSync(outputPath, audioBuffer);
-
-      const stats = fs.statSync(outputPath);
-      console.log("\nFile saved successfully:");
-      console.log("Path:", outputPath);
-      console.log("Size:", stats.size, "bytes");
-
       return {
         message: "Music generated successfully",
-        outputPath,
-        fileSize: stats.size,
+        audioHex: response.data.data.audio,
         extraInfo: response.data.extra_info,
+        lyrics: params.lyrics,
       };
     } else {
       throw new Error("No audio data in response");
@@ -602,8 +584,8 @@ app.post("/generate-mini-maxi", async (req, res) => {
 
     // Step 2: Prepare MiniMaxi generation parameters
     const miniMaxiParams = {
-      voiceId: "vocal-2024112413150824-aj4GKzSM", // Default voice ID
-      instrumentalId: "instrumental-2024112413150824-UE4jIGJY", // Default instrumental ID
+      voiceId: "vocal-2024112413150824-aj4GKzSM",
+      instrumentalId: "instrumental-2024112413150824-UE4jIGJY",
       lyrics: lyrics,
     };
 
@@ -615,9 +597,9 @@ app.post("/generate-mini-maxi", async (req, res) => {
     console.log("Returning music generation result to client...");
     res.json({
       message: result.message,
-      filePath: result.outputPath,
-      fileSize: result.fileSize,
+      audioHex: result.audioHex,
       extraInfo: result.extraInfo,
+      lyrics: result.lyrics,
     });
   } catch (error) {
     console.error("Error during MiniMaxi music generation:", error);

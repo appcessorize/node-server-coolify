@@ -122,10 +122,21 @@
             document.getElementById("lyrics").textContent =
               data.lyrics || "Lyrics not available";
 
-            // Set up audio player with file path
+            // Display hex data
             const audioPlayer = document.getElementById("audioPlayer");
-            audioPlayer.src = data.filePath;
-            audioPlayer.load();
+            audioPlayer.style.display = "none"; // Hide audio player for now
+
+            // Add a pre element to display hex data
+            const hexDisplay = document.createElement("pre");
+            hexDisplay.textContent = `Audio Hex Data (first 100 chars): ${data.audioHex.substring(
+              0,
+              100
+            )}...`;
+            document.getElementById("result").appendChild(hexDisplay);
+
+            // Log the full hex data to console
+            console.log("Full Audio Hex Data:", data.audioHex);
+            console.log("Extra Info:", data.extraInfo);
 
             // Show results
             result.style.display = "block";
