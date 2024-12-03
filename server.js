@@ -812,7 +812,8 @@ async function generateFoxAIMusic(lyrics) {
       {
         model: "foxai-v1",
         tags: ["dance", "house"],
-        lyrics: lyrics,
+        // lyrics: lyrics,
+        description: `A ringtone about ${prompt} `,
       },
       {
         headers: {
