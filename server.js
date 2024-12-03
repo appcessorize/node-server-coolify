@@ -776,11 +776,12 @@ async function generateFoxAILyrics(prompt) {
         {
           role: "system",
           content:
-            "Generate ringtone lyrics (8-12 lines) in the format [Verse]\n followed by lyrics then [Verse 2]\n followed by lyrics. Make the lyrics engaging and suitable for a pop/rock song. Keep the tone upbeat and memorable.",
+            "Generate ringtone lyrics (8-12 lines) in the format [Verse]\n followed by lyrics then [Verse 2]\n followed by lyrics. Make the lyrics engaging and suitable for a pop/rock song. Keep the tone upbeat and memorable." +
+            prompt,
         },
         {
           role: "user",
-          content: prompt,
+          content: `Write ringtone lyrics about: ${prompt}`,
         },
       ],
       temperature: 1,
