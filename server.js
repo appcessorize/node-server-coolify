@@ -813,7 +813,7 @@ async function generateFoxAIMusic(lyrics) {
         model: "foxai-v1",
         tags: ["dance", "house"],
         // lyrics: lyrics,
-        description: `A ringtone about ${prompt} `,
+        description: `A ringtone about about Sophie Gordon `,
       },
       {
         headers: {
