@@ -766,7 +766,42 @@ app.post("/generate-and-process", async (req, res) => {
 });
 
 // fox-ai
+// Add FoxAI lyrics generation function
+async function generateFoxAILyrics(prompt) {
+  console.log("Generating lyrics with OpenAI for FoxAI...");
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate ringtone lyrics (8-12 lines) in the format [Verse]\n followed by lyrics then [Verse 2]\n followed by lyrics. Make the lyrics engaging and suitable for a pop/rock song. Keep the tone upbeat and memorable.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 1,
+      max_tokens: 256,
+      top_p: 1,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    });
 
+    console.log("OpenAI Response:", JSON.stringify(response, null, 2));
+    const lyrics = response.choices[0].message.content;
+    console.log("Generated Lyrics:", lyrics);
+
+    // Format lyrics to match FoxAI's expected format
+    const formattedLyrics = lyrics.replace(/\n\n/g, "\n");
+    return formattedLyrics;
+  } catch (error) {
+    console.error("Error generating lyrics:", error);
+    throw error;
+  }
+}
 // Add FoxAI music generation function
 async function generateFoxAIMusic(lyrics) {
   console.log("Generating music with FoxAI...");
