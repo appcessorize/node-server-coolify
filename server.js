@@ -811,7 +811,7 @@ async function generateFoxAIMusic(lyrics) {
       "https://api.foxai.me/api/v1/music/generate",
       {
         model: "foxai-v1",
-        tags: ["rock", "pop"],
+        tags: ["dance", "house"],
         lyrics: lyrics,
       },
       {
