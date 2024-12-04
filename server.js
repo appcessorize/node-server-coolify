@@ -804,17 +804,17 @@ async function generateFoxAILyrics(prompt) {
   }
 }
 // Add FoxAI music generation function
-async function generateFoxAIMusic(prompt, genre) {
+async function generateFoxAIMusic(prompt) {
   console.log("Generating music with FoxAI...");
   try {
     const response = await axios.post(
       "https://api.foxai.me/api/v1/music/generate",
       {
         model: "foxai-v1",
-        tags: genre,
+        tags: ["ringtone", "no intro"],
         // tags: ["dance", "house"],
         // lyrics: lyrics,
-        description: `A fun ringtone. ${prompt}`,
+        description: `A fun ringtone about${prompt}`,
       },
       {
         headers: {
@@ -893,7 +893,7 @@ async function checkFoxAIStatus(songs) {
 app.post("/generate-foxai-url", async (req, res) => {
   console.log("Starting the FoxAI generate-url workflow...");
   try {
-    const { prompt, genre } = req.body;
+    const { prompt } = req.body;
 
     const validatedPrompt = validatePrompt(prompt);
 
@@ -904,7 +904,7 @@ app.post("/generate-foxai-url", async (req, res) => {
     // Step 2: Generate music with FoxAI using the lyrics
     console.log("Step 2: Generating music...");
     // const songs = await generateFoxAIMusic(lyrics);
-    const songs = await generateFoxAIMusic(prompt, genre);
+    const songs = await generateFoxAIMusic(prompt);
     // Wait for first available URL
     console.log("Waiting for generation to complete...");
     let songData = null;
