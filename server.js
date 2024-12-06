@@ -957,36 +957,6 @@ async function generateFoxAILyrics(prompt) {
   }
 }
 // Add FoxAI music generation function
-async function generateFoxAIMusic(prompt, genre = "pop") {
-  console.log("Generating music with FoxAI...");
-  console.log("Selected genre:", genre);
-
-  // Get genre-specific details or fall back to pop
-  const genreDetails = genrePrompts[genre.toLowerCase()] || genrePrompts.pop;
-  console.log("genreDetails", genreDetails);
-  try {
-    const response = await axios.post(
-      "https://api.foxai.me/api/v1/music/generate",
-      {
-        model: "foxai-v1",
-        tags: genreDetails.tags,
-        description: `${genreDetails.description} The song should be about${prompt}`,
-      },
-      {
-        headers: {
-          "api-key": process.env.FOXAI_API_KEY,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    console.log("FoxAI Response:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Error generating music:", error);
-    throw error;
-  }
-}
 
 // Add FoxAI status checking function
 async function checkFoxAIStatus(songs) {
@@ -1045,13 +1015,39 @@ async function checkFoxAIStatus(songs) {
   }
 }
 
-// Add new endpoint for FoxAI generation
-// Add new endpoint for FoxAI generation
+async function generateFoxAIMusic(prompt, genreDetails) {
+  console.log("Generating music with FoxAI...");
+  console.log("Using genre details:", genreDetails);
+  try {
+    const response = await axios.post(
+      "https://api.foxai.me/api/v1/music/generate",
+      {
+        model: "foxai-v1",
+        tags: genreDetails.tags,
+        description: `${genreDetails.description} The song should be about${prompt}`,
+      },
+      {
+        headers: {
+          "api-key": process.env.FOXAI_API_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("FoxAI Response:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Error generating music:", error);
+    throw error;
+  }
+}
+
 app.post("/generate-foxai-url", async (req, res) => {
   console.log("Starting the FoxAI generate-url workflow...");
   try {
     const { prompt, genre = "pop" } = req.body;
     console.log("Received request with prompt:", prompt);
+    console.log("Received genre:", genre);
 
     // Clean up the genre regardless of how it's sent
     const cleanGenre = Array.isArray(genre)
@@ -1064,14 +1060,10 @@ app.post("/generate-foxai-url", async (req, res) => {
 
     // Get the appropriate genre details or fall back to pop
     const genreDetails = genrePrompts[cleanGenre] || genrePrompts.pop;
-    console.log(" genreDetails:", genreDetail);
-    console.log("Using genre description:", genreDetails.description);
+    console.log("Using genre details:", genreDetails);
 
     // Generate music with FoxAI using the genre-specific description
-    const songs = await generateFoxAIMusic(
-      validatedPrompt,
-      genreDetails.description
-    );
+    const songs = await generateFoxAIMusic(validatedPrompt, genreDetails);
 
     // Wait for first available URL
     console.log("Waiting for generation to complete...");
