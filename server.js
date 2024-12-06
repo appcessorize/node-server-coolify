@@ -1024,7 +1024,7 @@ async function generateFoxAIMusic(prompt, genreDetails) {
       {
         model: "foxai-v1",
         tags: genreDetails.tags,
-        description: `${genreDetails.description} The song should be about${prompt}`,
+        description: `${prompt} , ${genreDetails.description} ${prompt}`,
       },
       {
         headers: {
@@ -1063,7 +1063,7 @@ app.post("/generate-foxai-url", async (req, res) => {
     console.log("Using genre details:", genreDetails);
 
     // Generate music with FoxAI using the genre-specific description
-    const songs = await generateFoxAIMusic(validatedPrompt, genreDetails);
+    const songs = await generateFoxAIMusic(prompt, genreDetails);
 
     // Wait for first available URL
     console.log("Waiting for generation to complete...");
