@@ -1046,17 +1046,25 @@ async function checkFoxAIStatus(songs) {
 }
 
 // Add new endpoint for FoxAI generation
+// Add new endpoint for FoxAI generation
 app.post("/generate-foxai-url", async (req, res) => {
   console.log("Starting the FoxAI generate-url workflow...");
   try {
     const { prompt, genre = "pop" } = req.body;
     console.log("Received request with prompt:", prompt);
-    console.log("Received genre:", genre);
+
+    // Clean up the genre regardless of how it's sent
+    const cleanGenre = Array.isArray(genre)
+      ? genre[0].toLowerCase().replace(/[^a-z0-9]/g, "")
+      : genre.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    console.log("Cleaned genre:", cleanGenre);
 
     const validatedPrompt = validatePrompt(prompt);
 
-    // Get genre description or default to pop
-    const genreDetails = genrePrompts[genre.toLowerCase()] || genrePrompts.pop;
+    // Get the appropriate genre details or fall back to pop
+    const genreDetails = genrePrompts[cleanGenre] || genrePrompts.pop;
+    console.log(" genreDetails:", genreDetail);
     console.log("Using genre description:", genreDetails.description);
 
     // Generate music with FoxAI using the genre-specific description
