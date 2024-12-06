@@ -9,7 +9,7 @@ const cors = require("cors");
 const OpenAI = require("openai");
 const axios = require("axios");
 const FormData = require("form-data");
-
+const genrePrompts = require("./genrePrompts");
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -804,18 +804,20 @@ async function generateFoxAILyrics(prompt) {
   }
 }
 // Add FoxAI music generation function
-async function generateFoxAIMusic(prompt, genre = ["pop"]) {
+async function generateFoxAIMusic(prompt, genre = "pop") {
   console.log("Generating music with FoxAI...");
-  console.log("Selected genre:", genre); // Log the genre
+  console.log("Selected genre:", genre);
+
+  // Get genre-specific details or fall back to pop
+  const genreDetails = genrePrompts[genre.toLowerCase()] || genrePrompts.pop;
+  console.log("genreDetails", genreDetails);
   try {
     const response = await axios.post(
       "https://api.foxai.me/api/v1/music/generate",
       {
         model: "foxai-v1",
-        tags: ["ringtone", "no intro", ...genre],
-        // tags: ["dance", "house"],
-        // lyrics: lyrics,
-        description: `A fun ringtone about${prompt}`,
+        tags: genreDetails.tags,
+        description: `${genreDetails.description} The song should be about${prompt}`,
       },
       {
         headers: {
@@ -894,20 +896,22 @@ async function checkFoxAIStatus(songs) {
 app.post("/generate-foxai-url", async (req, res) => {
   console.log("Starting the FoxAI generate-url workflow...");
   try {
-    const { prompt, genre } = req.body;
+    const { prompt, genre = "pop" } = req.body;
     console.log("Received request with prompt:", prompt);
-    console.log("Received genre:", genre); // Log the received genre
+    console.log("Received genre:", genre);
 
     const validatedPrompt = validatePrompt(prompt);
 
-    // Step 1: Generate lyrics with OpenAI
-    console.log("Step 1: Generating lyrics...");
-    // const lyrics = await generateFoxAILyrics(validatedPrompt);
+    // Get genre description or default to pop
+    const genreDetails = genrePrompts[genre.toLowerCase()] || genrePrompts.pop;
+    console.log("Using genre description:", genreDetails.description);
 
-    // Step 2: Generate music with FoxAI using the lyrics
-    console.log("Step 2: Generating music...");
-    // const songs = await generateFoxAIMusic(lyrics);
-    const songs = await generateFoxAIMusic(prompt, genre);
+    // Generate music with FoxAI using the genre-specific description
+    const songs = await generateFoxAIMusic(
+      validatedPrompt,
+      genreDetails.description
+    );
+
     // Wait for first available URL
     console.log("Waiting for generation to complete...");
     let songData = null;
