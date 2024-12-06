@@ -1654,12 +1654,20 @@ async function checkFoxAIStatus(songs) {
 async function generateFoxAIMusic(prompt, cleanGenre, genreDetails) {
   console.log("Generating music with FoxAI...");
   console.log("Using genre details:", genreDetails);
+  const tags = Array.isArray(genreDetails) ? genreDetails : [];
+
+  // Filter out any non-string values and empty strings
+  const cleanTags = tags.filter(
+    (tag) => typeof tag === "string" && tag.trim().length > 0
+  );
+
+  console.log("Cleaned tags:", cleanTags);
   try {
     const response = await axios.post(
       "https://api.foxai.me/api/v1/music/generate",
       {
         model: "foxai-v1",
-        tags: genreDetails,
+        tags: cleanTags,
         description: `a ${cleanGenre} ringtone about ${prompt}, ${prompt} is calling on the phone right now`,
       },
       {
