@@ -30,7 +30,18 @@ const requiredEnvVars = [
   "MINIMAXI_API_KEY",
 ];
 
-// const genrePrompts = {
+const rateLimit = require("express-rate-limit");
+
+// Create a custom limiter for the FoxAI route
+const foxAILimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour window
+  max: 100, // limit each IP to 100 requests per hour
+  message: {
+    error: "Too many requests from this IP, please try again after an hour",
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
 //   pop: {
 //     description:
 //       "[GENRES: Pop, Catchy] [SOUNDS LIKE: Dua Lipa, The Chainsmokers] [STYLE: Bright, Energetic, Upbeat] [MOOD: Playful, Uplifting, Modern]  [ARRANGEMENT: Short loop, Catchy, Hook-driven] [INSTRUMENTATION: Synthesizers, Electronic Beats, Chime Effects] [TEMPO: Fast, 120-140 BPM] [PRODUCTION: Crisp, Clear, Bright tones] [DURATION: 29 seconds]",
@@ -1677,7 +1688,81 @@ async function generateFoxAIMusic(prompt, cleanGenre, genreDetails) {
   }
 }
 
-app.post("/generate-foxai-url", async (req, res) => {
+// app.post("/generate-foxai-url", async (req, res) => {
+//   console.log("Starting the FoxAI generate-url workflow...");
+//   try {
+//     const { prompt, genre = "pop" } = req.body;
+//     console.log("Received request with prompt:", prompt);
+//     console.log("Received genre:", genre);
+
+//     // Clean up the genre regardless of how it's sent
+//     const cleanGenre = Array.isArray(genre)
+//       ? genre[0].toLowerCase().replace(/[^a-z0-9]/g, "")
+//       : genre.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+//     console.log("Cleaned genre:", cleanGenre);
+
+//     const validatedPrompt = validatePrompt(prompt);
+
+//     // Get the appropriate genre details or fall back to pop
+//     const genreDetails = genrePrompts[cleanGenre] || genrePrompts.pop;
+//     console.log("Using genre details:", genreDetails);
+
+//     // Generate music with FoxAI using the genre-specific description
+//     const songs = await generateFoxAIMusic(prompt, cleanGenre, genreDetails);
+
+//     // Wait for first available URL
+//     console.log("Waiting for generation to complete...");
+//     let songData = null;
+//     const maxAttempts = 60;
+//     let attempts = 0;
+
+//     while (attempts < maxAttempts && !songData) {
+//       const {
+//         allComplete,
+//         songData: data,
+//         status,
+//       } = await checkFoxAIStatus(songs);
+
+//       if (data) {
+//         songData = data;
+//         break;
+//       }
+
+//       attempts++;
+//       if (attempts < maxAttempts) {
+//         console.log("Waiting 5 seconds before next check...");
+//         await new Promise((resolve) => setTimeout(resolve, 5000));
+//       }
+//     }
+
+//     if (!songData) {
+//       throw new Error("Timeout: Music generation incomplete");
+//     }
+
+//     // Return the complete song data to the client
+//     console.log("Returning song data to client...");
+//     res.json({
+//       audio_url: songData.audio_url,
+//       image_url: songData.image_url,
+//       video_url: songData.video_url,
+//       title: songData.title,
+//       metadata: songData.metadata,
+//       duration: songData.duration,
+//       created_at: songData.created_at,
+//     });
+//   } catch (error) {
+//     console.error("Error during processing:", error);
+//     if (!res.headersSent) {
+//       res.status(500).json({
+//         error: "An error occurred during processing.",
+//         message: error.message,
+//       });
+//     }
+//   }
+// });
+
+app.post("/generate-foxai-url", foxAILimiter, async (req, res) => {
   console.log("Starting the FoxAI generate-url workflow...");
   try {
     const { prompt, genre = "pop" } = req.body;
