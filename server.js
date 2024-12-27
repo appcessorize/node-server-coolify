@@ -23,12 +23,21 @@ const openaiApiKey = process.env.OPENAI_API_KEY;
 const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
 const MINIMAXI_API_KEY = process.env.MINIMAXI_API_KEY;
+
+const jwt = require("jsonwebtoken");
+if (!process.env.JWT_SECRET) {
+  console.error("Missing JWT_SECRET environment variable");
+  process.exit(1);
+}
+const JWT_SECRET = process.env.JWT_SECRET;
+
 const requiredEnvVars = [
   "OPENAI_API_KEY",
   "SUNO_API_KEY",
   "API_KEY_1",
   "API_KEY_2",
   "MINIMAXI_API_KEY",
+  "JWT_SECRET",
 ];
 
 const rateLimit = require("express-rate-limit");
@@ -1408,6 +1417,51 @@ app.post("/generate-and-process", async (req, res) => {
 });
 
 // fox-ai
+
+const jwt = require("jsonwebtoken");
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"; // Add to your .env!
+
+// Add to your requiredEnvVars array
+requiredEnvVars.push("JWT_SECRET");
+
+// Auth endpoint - Add this before your routes
+app.post("/auth/token", async (req, res) => {
+  const apiKey = req.header("X-API-Key");
+
+  if (!apiKey || !API_KEYS.includes(apiKey)) {
+    return res.status(401).json({ message: "Invalid API key" });
+  }
+
+  const token = jwt.sign(
+    {
+      apiKey,
+      timestamp: Date.now(),
+    },
+    JWT_SECRET,
+    { expiresIn: "5m" }
+  );
+
+  res.json({ token });
+});
+
+// JWT verification middleware
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+};
+
 // Add FoxAI lyrics generation function
 async function generateFoxAILyrics(prompt) {
   console.log("Generating lyrics with OpenAI for FoxAI...");
@@ -1613,7 +1667,81 @@ async function generateFoxAIMusic(prompt, cleanGenre, genreDetails) {
 //   }
 // });
 
-app.post("/generate-foxai-url", foxAILimiter, async (req, res) => {
+// app.post("/generate-foxai-url", foxAILimiter, async (req, res) => {
+//   console.log("Starting the FoxAI generate-url workflow...");
+//   try {
+//     const { prompt, genre = "pop" } = req.body;
+//     console.log("Received request with prompt:", prompt);
+//     console.log("Received genre:", genre);
+
+//     // Clean up the genre regardless of how it's sent
+//     const cleanGenre = Array.isArray(genre)
+//       ? genre[0].toLowerCase().replace(/[^a-z0-9]/g, "")
+//       : genre.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+//     console.log("Cleaned genre:", cleanGenre);
+
+//     const validatedPrompt = validatePrompt(prompt);
+
+//     // Get the appropriate genre details or fall back to pop
+//     const genreDetails = genrePrompts[cleanGenre] || genrePrompts.pop;
+//     console.log("Using genre details:", genreDetails);
+
+//     // Generate music with FoxAI using the genre-specific description
+//     const songs = await generateFoxAIMusic(prompt, cleanGenre, genreDetails);
+
+//     // Wait for first available URL
+//     console.log("Waiting for generation to complete...");
+//     let songData = null;
+//     const maxAttempts = 60;
+//     let attempts = 0;
+
+//     while (attempts < maxAttempts && !songData) {
+//       const {
+//         allComplete,
+//         songData: data,
+//         status,
+//       } = await checkFoxAIStatus(songs);
+
+//       if (data) {
+//         songData = data;
+//         break;
+//       }
+
+//       attempts++;
+//       if (attempts < maxAttempts) {
+//         console.log("Waiting 5 seconds before next check...");
+//         await new Promise((resolve) => setTimeout(resolve, 5000));
+//       }
+//     }
+
+//     if (!songData) {
+//       throw new Error("Timeout: Music generation incomplete");
+//     }
+
+//     // Return the complete song data to the client
+//     console.log("Returning song data to client...");
+//     res.json({
+//       audio_url: songData.audio_url,
+//       image_url: songData.image_url,
+//       video_url: songData.video_url,
+//       title: songData.title,
+//       metadata: songData.metadata,
+//       duration: songData.duration,
+//       created_at: songData.created_at,
+//     });
+//   } catch (error) {
+//     console.error("Error during processing:", error);
+//     if (!res.headersSent) {
+//       res.status(500).json({
+//         error: "An error occurred during processing.",
+//         message: error.message,
+//       });
+//     }
+//   }
+// });
+
+app.post("/generate-foxai-url", verifyToken, foxAILimiter, async (req, res) => {
   console.log("Starting the FoxAI generate-url workflow...");
   try {
     const { prompt, genre = "pop" } = req.body;
