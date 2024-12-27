@@ -24,13 +24,6 @@ const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
 const MINIMAXI_API_KEY = process.env.MINIMAXI_API_KEY;
 
-const jwt = require("jsonwebtoken");
-if (!process.env.JWT_SECRET) {
-  console.error("Missing JWT_SECRET environment variable");
-  process.exit(1);
-}
-const JWT_SECRET = process.env.JWT_SECRET;
-
 const requiredEnvVars = [
   "OPENAI_API_KEY",
   "SUNO_API_KEY",
@@ -1415,14 +1408,6 @@ app.post("/generate-and-process", async (req, res) => {
     }
   }
 });
-
-// fox-ai
-
-const jwt = require("jsonwebtoken");
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"; // Add to your .env!
-
-// Add to your requiredEnvVars array
-requiredEnvVars.push("JWT_SECRET");
 
 // Auth endpoint - Add this before your routes
 app.post("/auth/token", async (req, res) => {
