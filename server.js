@@ -738,12 +738,19 @@ function apiKeyAuth(req, res, next) {
 }
 
 // Apply API key middleware to all routes except / and /healthcheck
+// Update this section
 app.use((req, res, next) => {
-  if (req.path === "/" || req.path === "/health") {
+  if (
+    req.path === "/" ||
+    req.path === "/health" ||
+    req.path === "/generate-foxai-url"
+  ) {
+    // Add the protected route to bypass
     return next();
   }
   return apiKeyAuth(req, res, next);
 });
+
 async function generateLyrics(prompt) {
   console.log("Generating lyrics with OpenAI...");
   try {
@@ -1442,9 +1449,12 @@ app.post("/auth/token", async (req, res) => {
 });
 
 // JWT verification middleware
+// JWT verification middleware
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+
+  console.log("Verifying token:", token?.substring(0, 20) + "..."); // Add logging
 
   if (!token) {
     return res.status(401).json({ message: "No token provided" });
@@ -1452,9 +1462,11 @@ const verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    console.log("Token verified successfully:", decoded); // Add logging
     req.user = decoded;
     next();
   } catch (err) {
+    console.log("Token verification failed:", err.message); // Add logging
     return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
@@ -1745,6 +1757,7 @@ async function generateFoxAIMusic(prompt, cleanGenre, genreDetails) {
 // });
 
 app.post("/generate-foxai-url", verifyToken, foxAILimiter, async (req, res) => {
+  console.log("User from token:", req.user); // Add logging
   console.log("Starting the FoxAI generate-url workflow...");
   try {
     const { prompt, genre = "pop" } = req.body;
