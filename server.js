@@ -15,10 +15,9 @@ app.set("trust proxy", 1); // Trust first proxy
 app.use(cors());
 app.use(express.json());
 app.use("/outputs", express.static("outputs")); // Serve the outputs directory statically
-
+const jwt = require("jsonwebtoken");
 const upload = multer({ dest: "uploads/" });
 
-// Load API keys from environment variables
 const openaiApiKey = process.env.OPENAI_API_KEY;
 const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
