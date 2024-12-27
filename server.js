@@ -22,7 +22,7 @@ const openaiApiKey = process.env.OPENAI_API_KEY;
 const sunoApiKey = process.env.SUNO_API_KEY;
 const API_KEYS = [process.env.API_KEY_1, process.env.API_KEY_2];
 const MINIMAXI_API_KEY = process.env.MINIMAXI_API_KEY;
-const JWT_SECRET = process.env.JWT_SECRET; /
+const JWT_SECRET = process.env.JWT_SECRET;
 const requiredEnvVars = [
   "OPENAI_API_KEY",
   "SUNO_API_KEY",
@@ -678,7 +678,7 @@ function checkEnvVariables() {
     console.error("JWT_SECRET is missing or undefined");
     return false;
   }
-  
+
   const missingVars = requiredEnvVars.filter(
     (varName) => !process.env[varName]
   );
