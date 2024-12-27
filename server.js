@@ -1056,38 +1056,38 @@ async function pollStatus(songIds, returnFirstAvailable = false) {
 }
 
 // Function to poll status until complete or max attempts reached
-async function pollStatus(songIds, returnFirstAvailable = false) {
-  // Use different polling settings based on the endpoint
-  const interval = returnFirstAvailable ? 5000 : 15000; // 5 seconds for URL, 15 seconds for processing
-  const maxAttempts = returnFirstAvailable ? 60 : 20; // 60 attempts for URL (5 mins total), 20 for processing (5 mins total)
-  let attempts = 0;
+// async function pollStatus(songIds, returnFirstAvailable = false) {
+//   // Use different polling settings based on the endpoint
+//   const interval = returnFirstAvailable ? 5000 : 15000; // 5 seconds for URL, 15 seconds for processing
+//   const maxAttempts = returnFirstAvailable ? 60 : 20; // 60 attempts for URL (5 mins total), 20 for processing (5 mins total)
+//   let attempts = 0;
 
-  while (attempts < maxAttempts) {
-    console.log(`Attempt ${attempts + 1} to check status...`);
-    const { allComplete, audioUrl } = await checkStatus(
-      songIds,
-      returnFirstAvailable
-    );
+//   while (attempts < maxAttempts) {
+//     console.log(`Attempt ${attempts + 1} to check status...`);
+//     const { allComplete, audioUrl } = await checkStatus(
+//       songIds,
+//       returnFirstAvailable
+//     );
 
-    if (audioUrl && (returnFirstAvailable || allComplete)) {
-      console.log(
-        returnFirstAvailable
-          ? "First song is complete!"
-          : "All songs are complete!"
-      );
-      return audioUrl;
-    }
+//     if (audioUrl && (returnFirstAvailable || allComplete)) {
+//       console.log(
+//         returnFirstAvailable
+//           ? "First song is complete!"
+//           : "All songs are complete!"
+//       );
+//       return audioUrl;
+//     }
 
-    attempts++;
-    if (attempts < maxAttempts) {
-      console.log(`Waiting ${interval / 1000} seconds before next check...`);
-      await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-  }
+//     attempts++;
+//     if (attempts < maxAttempts) {
+//       console.log(`Waiting ${interval / 1000} seconds before next check...`);
+//       await new Promise((resolve) => setTimeout(resolve, interval));
+//     }
+//   }
 
-  console.log("Max attempts reached. Some songs may not be complete.");
-  throw new Error("Timeout: Music generation incomplete");
-}
+//   console.log("Max attempts reached. Some songs may not be complete.");
+//   throw new Error("Timeout: Music generation incomplete");
+// }
 
 // Function to download audio file
 async function downloadFile(url, outputPath) {
@@ -1412,21 +1412,29 @@ app.post("/generate-and-process", async (req, res) => {
 // Auth endpoint - Add this before your routes
 app.post("/auth/token", async (req, res) => {
   const apiKey = req.header("X-API-Key");
+  console.log("Auth token request received with API Key:", apiKey);
 
   if (!apiKey || !API_KEYS.includes(apiKey)) {
+    console.log("Invalid API key:", apiKey);
     return res.status(401).json({ message: "Invalid API key" });
   }
 
-  const token = jwt.sign(
-    {
-      apiKey,
-      timestamp: Date.now(),
-    },
-    JWT_SECRET,
-    { expiresIn: "5m" }
-  );
+  try {
+    const token = jwt.sign(
+      {
+        apiKey,
+        timestamp: Date.now(),
+      },
+      JWT_SECRET,
+      { expiresIn: "5m" }
+    );
 
-  res.json({ token });
+    console.log("Token generated successfully");
+    res.json({ token });
+  } catch (error) {
+    console.error("Error generating token:", error);
+    res.status(500).json({ message: "Error generating token" });
+  }
 });
 
 // JWT verification middleware
@@ -1486,6 +1494,12 @@ async function generateFoxAILyrics(prompt) {
 }
 // Add FoxAI music generation function
 
+app.get("/auth/health", (req, res) => {
+  if (!JWT_SECRET) {
+    return res.status(500).json({ message: "JWT_SECRET not configured" });
+  }
+  res.status(200).json({ message: "Auth service healthy" });
+});
 // Add FoxAI status checking function
 async function checkFoxAIStatus(songs) {
   try {
@@ -1822,6 +1836,7 @@ const server = app.listen(PORT, () => {
     SUNO_API_KEY: !!process.env.SUNO_API_KEY,
     API_KEY_1: !!process.env.API_KEY_1,
     API_KEY_2: !!process.env.API_KEY_2,
+    JWT_SECRET: !!process.env.JWT_SECRET,
   });
 });
 
