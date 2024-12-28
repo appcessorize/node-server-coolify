@@ -1421,33 +1421,51 @@ app.post("/generate-and-process", async (req, res) => {
 });
 
 // Auth endpoint - Add this before your routes
-app.post("/auth/token", async (req, res) => {
+// app.post("/auth/token", async (req, res) => {
+//   const apiKey = req.header("X-API-Key");
+//   console.log("Auth token request received with API Key:", apiKey);
+
+//   if (!apiKey || !API_KEYS.includes(apiKey)) {
+//     console.log("Invalid API key:", apiKey);
+//     return res.status(401).json({ message: "Invalid API key" });
+//   }
+
+//   try {
+//     const token = jwt.sign(
+//       {
+//         apiKey,
+//         timestamp: Date.now(),
+//       },
+//       JWT_SECRET,
+//       { expiresIn: "5m" }
+//     );
+
+//     console.log("Token generated successfully");
+//     res.json({ token });
+//   } catch (error) {
+//     console.error("Error generating token:", error);
+//     res.status(500).json({ message: "Error generating token" });
+//   }
+// });
+// Auth endpoint with longer token validity
+app.post("/auth/token", apiKeyAuth, async (req, res) => {
   const apiKey = req.header("X-API-Key");
-  console.log("Auth token request received with API Key:", apiKey);
 
   if (!apiKey || !API_KEYS.includes(apiKey)) {
-    console.log("Invalid API key:", apiKey);
     return res.status(401).json({ message: "Invalid API key" });
   }
 
-  try {
-    const token = jwt.sign(
-      {
-        apiKey,
-        timestamp: Date.now(),
-      },
-      JWT_SECRET,
-      { expiresIn: "5m" }
-    );
+  const token = jwt.sign(
+    {
+      apiKey,
+      timestamp: Date.now(),
+    },
+    JWT_SECRET,
+    { expiresIn: "7d" } // Changed from 5m to 7 days
+  );
 
-    console.log("Token generated successfully");
-    res.json({ token });
-  } catch (error) {
-    console.error("Error generating token:", error);
-    res.status(500).json({ message: "Error generating token" });
-  }
+  res.json({ token });
 });
-
 // JWT verification middleware
 // JWT verification middleware
 const verifyToken = (req, res, next) => {
