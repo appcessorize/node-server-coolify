@@ -691,7 +691,9 @@ if (!checkEnvVariables()) {
 }
 
 const openai = new OpenAI({ apiKey: openaiApiKey });
-const SUNO_BASE_URL = "https://api.sunoaiapi.com/api/v1/gateway";
+// const SUNO_BASE_URL = "https://api.sunoaiapi.com/api/v1/gateway";
+
+const SUNO_BASE_URL = "https://api.sunoaiapi.com/api/v1/udio";
 
 // Healthcheck Endpoint
 app.get("/health", (req, res) => {
@@ -943,17 +945,28 @@ async function generateMusic(lyrics) {
 }
 
 async function generateMusicIdeasMusic(lyrics) {
-  console.log("Generating music with Suno...");
+  console.log("Generating music with Udio...");
   try {
     const response = await axios.post(
-      `${SUNO_BASE_URL}/generate/music`,
+      `${SUNO_BASE_URL}/generate-proxy`,
       {
-        title: "Song",
-        tags: "Energetic, Catchy, Fun,Duet, Broadway",
-        prompt:
-          "[GENRES: Broadway, Musical Theater][vocal add ons][Duet][Duet with Male and female singer]" +
-          lyrics,
-        mv: "chirp-v3-5",
+        gen_params: {
+          prompt: `[GENRES: Broadway, Musical Theater][vocal add ons][Duet][Duet with Male and female singer] ${lyrics}`,
+          lyrics: lyrics,
+          lyrics_type: "generate",
+          bypass_prompt_optimization: false,
+          seed: -1,
+          song_section_start: 0.4,
+          prompt_strength: 0.5,
+          clarity_strength: 0.25,
+          lyrics_strength: 0.5,
+          generation_quality: 0.75,
+          negative_prompt: "",
+          model_type: "udio32-v1.5",
+          config: {
+            mode: "regular",
+          },
+        },
       },
       {
         headers: {
@@ -963,50 +976,134 @@ async function generateMusicIdeasMusic(lyrics) {
       }
     );
 
-    const songIds = response.data.data.map((song) => song.song_id);
-    console.log("Generated song IDs:", songIds);
-    return songIds;
+    const trackIds = response.data.track_ids || [];
+    console.log("Generated track IDs:", trackIds);
+    return trackIds;
   } catch (error) {
     console.error("Error generating music:", error);
     throw error;
   }
 }
+
+// async function generateMusicIdeasMusic(lyrics) {
+//   console.log("Generating music with Suno...");
+//   try {
+//     const response = await axios.post(
+//       `${SUNO_BASE_URL}/generate/music`,
+//       {
+//         title: "Song",
+//         tags: "Energetic, Catchy, Fun,Duet, Broadway",
+//         prompt:
+//           "[GENRES: Broadway, Musical Theater][vocal add ons][Duet][Duet with Male and female singer]" +
+//           lyrics,
+//         mv: "chirp-v3-5",
+//       },
+//       {
+//         headers: {
+//           "Content-Type": "application/json",
+//           "api-key": sunoApiKey,
+//         },
+//       }
+//     );
+
+//     const songIds = response.data.data.map((song) => song.song_id);
+//     console.log("Generated song IDs:", songIds);
+//     return songIds;
+//   } catch (error) {
+//     console.error("Error generating music:", error);
+//     throw error;
+//   }
+// }
 // Function to check the status of generated songs
 // Function to check the status of generated songs
-async function checkStatus(songIds, returnFirstAvailable = false) {
+// async function checkStatus(songIds, returnFirstAvailable = false) {
+//   try {
+//     const response = await axios.get(`${SUNO_BASE_URL}/query`, {
+//       params: { ids: songIds.join(",") },
+//       headers: {
+//         "Content-Type": "application/json",
+//         "api-key": sunoApiKey,
+//       },
+//     });
+
+//     const results = response.data;
+//     let allComplete = true;
+//     let audioUrl = null;
+//     let currentStatus = "queued";
+
+//     for (const result of results) {
+//       console.log("Song ID:", result.id);
+//       console.log("Status:", result.status);
+
+//       // Update status based on current song
+//       if (result.status === "streaming" && currentStatus === "queued") {
+//         currentStatus = "streaming";
+//       }
+
+//       if (result.status === "complete") {
+//         console.log("Audio URL:", result.audio_url);
+//         audioUrl = result.audio_url;
+//         currentStatus = "complete";
+//         if (returnFirstAvailable) {
+//           console.log("First available URL found:", audioUrl);
+//           return { allComplete: true, audioUrl, status: currentStatus };
+//         }
+//       } else if (result.status === "error") {
+//         console.log("Error:", result.meta_data.error_message);
+//         allComplete = false;
+//         currentStatus = "error";
+//       } else {
+//         allComplete = false;
+//       }
+//       console.log("---");
+//     }
+
+//     // Log overall status
+//     console.log("Current overall status:", currentStatus);
+
+//     return {
+//       allComplete,
+//       audioUrl,
+//       status: currentStatus,
+//     };
+//   } catch (error) {
+//     console.error("Error checking status:", error);
+//     return {
+//       allComplete: false,
+//       audioUrl: null,
+//       status: "error",
+//     };
+//   }
+// }
+async function checkStatus(trackIds, returnFirstAvailable = false) {
   try {
-    const response = await axios.get(`${SUNO_BASE_URL}/query`, {
-      params: { ids: songIds.join(",") },
+    const response = await axios.get(`${SUNO_BASE_URL}/query_v2`, {
+      params: { ids: trackIds.join(",") },
       headers: {
         "Content-Type": "application/json",
         "api-key": sunoApiKey,
       },
     });
 
-    const results = response.data;
+    const results = response.data.songs || [];
     let allComplete = true;
     let audioUrl = null;
     let currentStatus = "queued";
 
     for (const result of results) {
-      console.log("Song ID:", result.id);
-      console.log("Status:", result.status);
+      console.log("Track ID:", result.id);
+      console.log("Status:", result.finished ? "complete" : "processing");
 
-      // Update status based on current song
-      if (result.status === "streaming" && currentStatus === "queued") {
-        currentStatus = "streaming";
-      }
-
-      if (result.status === "complete") {
-        console.log("Audio URL:", result.audio_url);
-        audioUrl = result.audio_url;
+      if (result.finished && result.song_path) {
+        console.log("Audio URL:", result.song_path);
+        audioUrl = result.song_path;
         currentStatus = "complete";
         if (returnFirstAvailable) {
           console.log("First available URL found:", audioUrl);
           return { allComplete: true, audioUrl, status: currentStatus };
         }
-      } else if (result.status === "error") {
-        console.log("Error:", result.meta_data.error_message);
+      } else if (result.error_detail) {
+        console.log("Error:", result.error_detail);
         allComplete = false;
         currentStatus = "error";
       } else {
@@ -1032,27 +1129,32 @@ async function checkStatus(songIds, returnFirstAvailable = false) {
     };
   }
 }
-
 // Function to poll status until complete or max attempts reached
-async function pollStatus(songIds, returnFirstAvailable = false) {
-  const interval = returnFirstAvailable ? 5000 : 15000; // 5 seconds for URL, 15 seconds for processing
-  const maxAttempts = returnFirstAvailable ? 60 : 20; // 60 attempts for URL (5 mins total), 20 for processing (5 mins total)
+
+async function pollStatus(trackIds, returnFirstAvailable = false) {
+  const interval = returnFirstAvailable ? 5000 : 15000;
+  const maxAttempts = returnFirstAvailable ? 60 : 20;
   let attempts = 0;
 
   while (attempts < maxAttempts) {
     console.log(`Attempt ${attempts + 1} to check status...`);
-    const { allComplete, audioUrl, status } = await checkStatus(
-      songIds,
-      returnFirstAvailable
-    );
-
-    if (audioUrl && (returnFirstAvailable || allComplete)) {
-      console.log(
+    try {
+      const { allComplete, audioUrl, status } = await checkStatus(
+        trackIds,
         returnFirstAvailable
-          ? "First song is complete!"
-          : "All songs are complete!"
       );
-      return audioUrl;
+
+      if (audioUrl && (returnFirstAvailable || allComplete)) {
+        console.log(
+          returnFirstAvailable
+            ? "First song is complete!"
+            : "All songs are complete!"
+        );
+        return audioUrl;
+      }
+    } catch (error) {
+      console.error(`Error in attempt ${attempts + 1}:`, error.message);
+      // Continue to next attempt rather than failing completely
     }
 
     attempts++;
@@ -1065,17 +1167,14 @@ async function pollStatus(songIds, returnFirstAvailable = false) {
   console.log("Max attempts reached. Some songs may not be complete.");
   throw new Error("Timeout: Music generation incomplete");
 }
-
-// Function to poll status until complete or max attempts reached
 // async function pollStatus(songIds, returnFirstAvailable = false) {
-//   // Use different polling settings based on the endpoint
 //   const interval = returnFirstAvailable ? 5000 : 15000; // 5 seconds for URL, 15 seconds for processing
 //   const maxAttempts = returnFirstAvailable ? 60 : 20; // 60 attempts for URL (5 mins total), 20 for processing (5 mins total)
 //   let attempts = 0;
 
 //   while (attempts < maxAttempts) {
 //     console.log(`Attempt ${attempts + 1} to check status...`);
-//     const { allComplete, audioUrl } = await checkStatus(
+//     const { allComplete, audioUrl, status } = await checkStatus(
 //       songIds,
 //       returnFirstAvailable
 //     );
@@ -1179,24 +1278,24 @@ app.post("/generate-url", async (req, res) => {
 });
 
 app.post("/generate-url-music-ideas", async (req, res) => {
-  console.log("Starting the generate-url workflow...");
+  console.log("Starting the generate-url-music-ideas workflow...");
   try {
     const { prompt } = req.body;
     const validatedPrompt = validateMusicIdeasPrompt(prompt);
 
-    // Step 1: Generate lyrics with OpenAI
+    // Step 1: Generate lyrics with OpenAI (stays the same)
     console.log("Step 1: Generating lyrics...");
     const lyrics = await generateMusicIdeasLyrics(validatedPrompt);
 
-    // Step 2: Generate music with Suno using the lyrics
+    // Step 2: Generate music with Udio using the lyrics
     console.log("Step 2: Generating music...");
-    const songIds = await generateMusicIdeasMusic(lyrics);
+    const trackIds = await generateMusicIdeasMusic(lyrics);
 
     // Wait for first available URL
     console.log("Waiting for first available URL...");
-    const audioUrl = await pollStatus(songIds, true);
+    const audioUrl = await pollStatus(trackIds, true);
 
-    // Return the URL to the client
+    // Return the URL to the client (format stays the same)
     console.log("Returning audio URL to client...");
     res.json({ url: audioUrl });
   } catch (error) {
@@ -1209,6 +1308,38 @@ app.post("/generate-url-music-ideas", async (req, res) => {
     }
   }
 });
+
+// app.post("/generate-url-music-ideas", async (req, res) => {
+//   console.log("Starting the generate-url workflow...");
+//   try {
+//     const { prompt } = req.body;
+//     const validatedPrompt = validateMusicIdeasPrompt(prompt);
+
+//     // Step 1: Generate lyrics with OpenAI
+//     console.log("Step 1: Generating lyrics...");
+//     const lyrics = await generateMusicIdeasLyrics(validatedPrompt);
+
+//     // Step 2: Generate music with Suno using the lyrics
+//     console.log("Step 2: Generating music...");
+//     const songIds = await generateMusicIdeasMusic(lyrics);
+
+//     // Wait for first available URL
+//     console.log("Waiting for first available URL...");
+//     const audioUrl = await pollStatus(songIds, true);
+
+//     // Return the URL to the client
+//     console.log("Returning audio URL to client...");
+//     res.json({ url: audioUrl });
+//   } catch (error) {
+//     console.error("Error during processing:", error);
+//     if (!res.headersSent) {
+//       res.status(500).json({
+//         error: "An error occurred during processing.",
+//         message: error.message,
+//       });
+//     }
+//   }
+// });
 // Add this function to your existing server code
 async function generateMiniMaxiMusic(params) {
   try {
@@ -1420,34 +1551,6 @@ app.post("/generate-and-process", async (req, res) => {
   }
 });
 
-// Auth endpoint - Add this before your routes
-// app.post("/auth/token", async (req, res) => {
-//   const apiKey = req.header("X-API-Key");
-//   console.log("Auth token request received with API Key:", apiKey);
-
-//   if (!apiKey || !API_KEYS.includes(apiKey)) {
-//     console.log("Invalid API key:", apiKey);
-//     return res.status(401).json({ message: "Invalid API key" });
-//   }
-
-//   try {
-//     const token = jwt.sign(
-//       {
-//         apiKey,
-//         timestamp: Date.now(),
-//       },
-//       JWT_SECRET,
-//       { expiresIn: "5m" }
-//     );
-
-//     console.log("Token generated successfully");
-//     res.json({ token });
-//   } catch (error) {
-//     console.error("Error generating token:", error);
-//     res.status(500).json({ message: "Error generating token" });
-//   }
-// });
-// Auth endpoint with longer token validity
 app.post("/auth/token", apiKeyAuth, async (req, res) => {
   const apiKey = req.header("X-API-Key");
 
@@ -1625,154 +1728,6 @@ async function generateFoxAIMusic(prompt, cleanGenre, genreDetails) {
     throw error;
   }
 }
-
-// app.post("/generate-foxai-url", async (req, res) => {
-//   console.log("Starting the FoxAI generate-url workflow...");
-//   try {
-//     const { prompt, genre = "pop" } = req.body;
-//     console.log("Received request with prompt:", prompt);
-//     console.log("Received genre:", genre);
-
-//     // Clean up the genre regardless of how it's sent
-//     const cleanGenre = Array.isArray(genre)
-//       ? genre[0].toLowerCase().replace(/[^a-z0-9]/g, "")
-//       : genre.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-//     console.log("Cleaned genre:", cleanGenre);
-
-//     const validatedPrompt = validatePrompt(prompt);
-
-//     // Get the appropriate genre details or fall back to pop
-//     const genreDetails = genrePrompts[cleanGenre] || genrePrompts.pop;
-//     console.log("Using genre details:", genreDetails);
-
-//     // Generate music with FoxAI using the genre-specific description
-//     const songs = await generateFoxAIMusic(prompt, cleanGenre, genreDetails);
-
-//     // Wait for first available URL
-//     console.log("Waiting for generation to complete...");
-//     let songData = null;
-//     const maxAttempts = 60;
-//     let attempts = 0;
-
-//     while (attempts < maxAttempts && !songData) {
-//       const {
-//         allComplete,
-//         songData: data,
-//         status,
-//       } = await checkFoxAIStatus(songs);
-
-//       if (data) {
-//         songData = data;
-//         break;
-//       }
-
-//       attempts++;
-//       if (attempts < maxAttempts) {
-//         console.log("Waiting 5 seconds before next check...");
-//         await new Promise((resolve) => setTimeout(resolve, 5000));
-//       }
-//     }
-
-//     if (!songData) {
-//       throw new Error("Timeout: Music generation incomplete");
-//     }
-
-//     // Return the complete song data to the client
-//     console.log("Returning song data to client...");
-//     res.json({
-//       audio_url: songData.audio_url,
-//       image_url: songData.image_url,
-//       video_url: songData.video_url,
-//       title: songData.title,
-//       metadata: songData.metadata,
-//       duration: songData.duration,
-//       created_at: songData.created_at,
-//     });
-//   } catch (error) {
-//     console.error("Error during processing:", error);
-//     if (!res.headersSent) {
-//       res.status(500).json({
-//         error: "An error occurred during processing.",
-//         message: error.message,
-//       });
-//     }
-//   }
-// });
-
-// app.post("/generate-foxai-url", foxAILimiter, async (req, res) => {
-//   console.log("Starting the FoxAI generate-url workflow...");
-//   try {
-//     const { prompt, genre = "pop" } = req.body;
-//     console.log("Received request with prompt:", prompt);
-//     console.log("Received genre:", genre);
-
-//     // Clean up the genre regardless of how it's sent
-//     const cleanGenre = Array.isArray(genre)
-//       ? genre[0].toLowerCase().replace(/[^a-z0-9]/g, "")
-//       : genre.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-//     console.log("Cleaned genre:", cleanGenre);
-
-//     const validatedPrompt = validatePrompt(prompt);
-
-//     // Get the appropriate genre details or fall back to pop
-//     const genreDetails = genrePrompts[cleanGenre] || genrePrompts.pop;
-//     console.log("Using genre details:", genreDetails);
-
-//     // Generate music with FoxAI using the genre-specific description
-//     const songs = await generateFoxAIMusic(prompt, cleanGenre, genreDetails);
-
-//     // Wait for first available URL
-//     console.log("Waiting for generation to complete...");
-//     let songData = null;
-//     const maxAttempts = 60;
-//     let attempts = 0;
-
-//     while (attempts < maxAttempts && !songData) {
-//       const {
-//         allComplete,
-//         songData: data,
-//         status,
-//       } = await checkFoxAIStatus(songs);
-
-//       if (data) {
-//         songData = data;
-//         break;
-//       }
-
-//       attempts++;
-//       if (attempts < maxAttempts) {
-//         console.log("Waiting 5 seconds before next check...");
-//         await new Promise((resolve) => setTimeout(resolve, 5000));
-//       }
-//     }
-
-//     if (!songData) {
-//       throw new Error("Timeout: Music generation incomplete");
-//     }
-
-//     // Return the complete song data to the client
-//     console.log("Returning song data to client...");
-//     res.json({
-//       audio_url: songData.audio_url,
-//       image_url: songData.image_url,
-//       video_url: songData.video_url,
-//       title: songData.title,
-//       metadata: songData.metadata,
-//       duration: songData.duration,
-//       created_at: songData.created_at,
-//     });
-//   } catch (error) {
-//     console.error("Error during processing:", error);
-//     if (!res.headersSent) {
-//       res.status(500).json({
-//         error: "An error occurred during processing.",
-//         message: error.message,
-//       });
-//     }
-//   }
-// });
 
 app.post("/generate-foxai-url", verifyToken, foxAILimiter, async (req, res) => {
   console.log("User from token:", req.user); // Add logging
