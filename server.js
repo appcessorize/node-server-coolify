@@ -1859,14 +1859,186 @@ const sonautoLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Add these enhanced logging functions to your backend code
+
+// Enhanced logging for the Sonauto endpoint
+app.post(
+  "/generate-sonauto-url",
+  verifyToken,
+  sonautoLimiter,
+  async (req, res) => {
+    console.log("========== GENERATE SONAUTO URL ==========");
+    console.log("User from token:", req.user);
+    console.log("Starting the Sonauto generate-url workflow...");
+    console.log("Request headers:", JSON.stringify(req.headers, null, 2));
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+
+    try {
+      const { prompt, genre = "pop", lyrics } = req.body;
+      console.log("Extracted prompt:", prompt);
+      console.log("Extracted genre:", genre);
+      console.log(
+        "Extracted lyrics:",
+        lyrics ? `${lyrics.substring(0, 50)}...` : "None provided"
+      );
+
+      // Clean up the genre regardless of how it's sent
+      const cleanGenre = Array.isArray(genre)
+        ? genre[0].toLowerCase().replace(/[^a-z0-9]/g, "")
+        : genre.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      console.log("Cleaned genre:", cleanGenre);
+
+      // Check if we have the genre prompts
+      console.log("Available genre keys:", Object.keys(sunautoGenrePrompts));
+
+      // Get the appropriate genre details or fall back to pop
+      const genreDetails =
+        sunautoGenrePrompts[cleanGenre] || sunautoGenrePrompts.pop;
+      console.log(
+        "Using genre details:",
+        JSON.stringify(genreDetails, null, 2)
+      );
+
+      // Prepare options for Sonauto
+      const options = {
+        prompt: `${prompt} ringtone, catchy, 30 seconds`,
+        tags: genreDetails,
+        instrumental: !lyrics, // If no lyrics, make it instrumental
+        seed: Math.floor(Math.random() * 1000000),
+        prompt_strength: 2.3,
+      };
+
+      console.log("Initial Sonauto options:", JSON.stringify(options, null, 2));
+
+      // Add lyrics if provided
+      if (lyrics && lyrics.trim()) {
+        options.lyrics = lyrics;
+        console.log("Using provided lyrics:", lyrics);
+
+        // Important: When lyrics are provided, we can't send tags according to API limitations
+        if (options.tags) {
+          console.log(
+            "Removing tags because lyrics are provided (API constraint)"
+          );
+          delete options.tags;
+        }
+      } else if (prompt) {
+        // Generate lyrics if not provided but we have a prompt
+        try {
+          console.log("Generating lyrics based on prompt...");
+          const generatedLyrics = await generateLyrics(prompt); // Using your existing lyrics generator
+          options.lyrics = generatedLyrics;
+          console.log("Generated lyrics:", generatedLyrics);
+
+          // Important: When lyrics are provided, we can't send tags according to API limitations
+          if (options.tags) {
+            console.log(
+              "Removing tags because lyrics were generated (API constraint)"
+            );
+            delete options.tags;
+          }
+        } catch (lyricsError) {
+          console.error("Error generating lyrics:", lyricsError);
+          // Continue without lyrics if generation fails
+          options.lyrics = "";
+        }
+      }
+
+      console.log("Final Sonauto options:", JSON.stringify(options, null, 2));
+
+      // Check for SONAUTO_API_KEY
+      if (!SONAUTO_API_KEY) {
+        console.error(
+          "SONAUTO_API_KEY is not defined in environment variables"
+        );
+        throw new Error("Sonauto API key is missing");
+      }
+
+      // Generate song with Sonauto
+      try {
+        console.log("Calling generateSonautoSong...");
+        const taskId = await generateSonautoSong(options);
+        console.log("Song generation initiated with task ID:", taskId);
+
+        // Start polling for completion in the background
+        console.log("Starting background polling for completion...");
+        pollSonautoCompletion(taskId)
+          .then((result) => {
+            console.log("Song completed in background:", result);
+          })
+          .catch((err) => {
+            console.error("Error during background polling:", err);
+          });
+
+        // Immediately return the task ID to the client
+        console.log("Returning successful response to client");
+        res.json({
+          success: true,
+          message: "Song generation started",
+          taskId: taskId,
+          genre: cleanGenre,
+        });
+      } catch (songError) {
+        console.error("Song generation error:", songError);
+        console.error(
+          "Error details:",
+          songError.response
+            ? JSON.stringify(songError.response.data, null, 2)
+            : "No response data"
+        );
+        throw songError;
+      }
+    } catch (error) {
+      console.error("Error during processing:", error);
+      console.error("Stack trace:", error.stack);
+
+      let statusCode = 500;
+      let errorMessage = error.message;
+
+      // If this is an Axios error with a response, extract more details
+      if (error.response) {
+        statusCode = error.response.status;
+        console.error(`API responded with status ${statusCode}`);
+        console.error(
+          "Response headers:",
+          JSON.stringify(error.response.headers, null, 2)
+        );
+        console.error(
+          "Response data:",
+          JSON.stringify(error.response.data, null, 2)
+        );
+
+        // Use the API's error message if available
+        if (error.response.data && error.response.data.error) {
+          errorMessage = `${error.message}: ${error.response.data.error}`;
+        }
+      }
+
+      // Special handling for common Sonauto API errors
+      if (statusCode === 422) {
+        errorMessage =
+          "Invalid parameters in the request. This might be due to restrictions with combining tags, lyrics, and prompts.";
+      }
+
+      if (!res.headersSent) {
+        res.status(statusCode).json({
+          error: "An error occurred during processing.",
+          message: errorMessage,
+          details: error.response ? error.response.data : null,
+        });
+      }
+    }
+    console.log("========== END GENERATE SONAUTO URL ==========");
+  }
+);
+
 /**
- * Generate a song using the Sonauto API
+ * Generate a song using the Sonauto API - Enhanced with better logging
  */
 async function generateSonautoSong(options = {}) {
-  console.log(
-    "Starting Sonauto song generation with options:",
-    JSON.stringify(options, null, 2)
-  );
+  console.log("========== GENERATE SONAUTO SONG ==========");
+  console.log("Options received:", JSON.stringify(options, null, 2));
 
   try {
     // Set up default payload with placeholder values
@@ -1890,7 +2062,25 @@ async function generateSonautoSong(options = {}) {
       console.log("Using tags and prompt for generation");
     }
 
-    console.log("Request payload:", JSON.stringify(payload, null, 2));
+    // Validate prompt and lyrics length
+    if (payload.prompt && payload.prompt.length > 500) {
+      console.warn("Warning: Prompt is too long, truncating to 500 characters");
+      payload.prompt = payload.prompt.substring(0, 500);
+    }
+
+    if (payload.lyrics && payload.lyrics.length > 1000) {
+      console.warn(
+        "Warning: Lyrics are too long, truncating to 1000 characters"
+      );
+      payload.lyrics = payload.lyrics.substring(0, 1000);
+    }
+
+    console.log("Final payload:", JSON.stringify(payload, null, 2));
+    console.log(
+      "Using Sonauto API key:",
+      SONAUTO_API_KEY ? `${SONAUTO_API_KEY.substring(0, 5)}...` : "NOT SET"
+    );
+    console.log("Request URL:", `${SONAUTO_BASE_URL}/generations`);
 
     const response = await axios.post(
       `${SONAUTO_BASE_URL}/generations`,
@@ -1904,31 +2094,45 @@ async function generateSonautoSong(options = {}) {
     );
 
     console.log("Sonauto generation request successful!");
+    console.log("Full response:", JSON.stringify(response.data, null, 2));
     console.log("Received task ID:", response.data.task_id);
 
     return response.data.task_id;
   } catch (error) {
     console.error("Error generating song with Sonauto:", error.message);
+    console.error("Stack trace:", error.stack);
 
     // Log API error details if available
-    if (error.response && error.response.data) {
+    if (error.response) {
+      console.error("API error status:", error.response.status);
       console.error(
-        "API error details:",
+        "API error headers:",
+        JSON.stringify(error.response.headers, null, 2)
+      );
+      console.error(
+        "API error data:",
         JSON.stringify(error.response.data, null, 2)
       );
     }
 
     throw error;
   }
+  console.log("========== END GENERATE SONAUTO SONG ==========");
 }
 
 /**
- * Check the status of a Sonauto generation task
+ * Enhanced status checking with better logging
  */
 async function checkSonautoStatus(taskId) {
-  console.log(`Checking Sonauto status for task: ${taskId}`);
+  console.log(`========== CHECKING SONAUTO STATUS: ${taskId} ==========`);
 
   try {
+    console.log(`Request URL: ${SONAUTO_BASE_URL}/generations/${taskId}`);
+    console.log(
+      "Using API key:",
+      SONAUTO_API_KEY ? `${SONAUTO_API_KEY.substring(0, 5)}...` : "NOT SET"
+    );
+
     const response = await axios.get(
       `${SONAUTO_BASE_URL}/generations/${taskId}`,
       {
@@ -1939,13 +2143,37 @@ async function checkSonautoStatus(taskId) {
     );
 
     console.log(
-      `Status check successful. Current status: ${response.data.status}`
+      `Status check successful. Full response:`,
+      JSON.stringify(response.data, null, 2)
     );
+    console.log(`Current status: ${response.data.status}`);
+
+    if (response.data.status === "SUCCESS") {
+      console.log("Song paths:", response.data.song_paths);
+    } else if (response.data.status === "FAILURE") {
+      console.error("Generation failed:", response.data.error_message);
+    }
+
     return response.data;
   } catch (error) {
     console.error(`Error checking status for task ${taskId}:`, error.message);
+    console.error("Stack trace:", error.stack);
+
+    if (error.response) {
+      console.error("Status check response error:", error.response.status);
+      console.error(
+        "Response headers:",
+        JSON.stringify(error.response.headers, null, 2)
+      );
+      console.error(
+        "Response data:",
+        JSON.stringify(error.response.data, null, 2)
+      );
+    }
+
     throw error;
   }
+  console.log(`========== END CHECKING SONAUTO STATUS: ${taskId} ==========`);
 }
 
 /**
@@ -2003,89 +2231,6 @@ async function pollSonautoCompletion(
 }
 
 // Add the new endpoint
-app.post(
-  "/generate-sonauto-url",
-  verifyToken,
-  sonautoLimiter,
-  async (req, res) => {
-    console.log("User from token:", req.user);
-    console.log("Starting the Sonauto generate-url workflow...");
-
-    try {
-      const { prompt, genre = "pop", lyrics } = req.body;
-      console.log("Received request with prompt:", prompt);
-      console.log("Received genre:", genre);
-
-      // Clean up the genre regardless of how it's sent
-      const cleanGenre = Array.isArray(genre)
-        ? genre[0].toLowerCase().replace(/[^a-z0-9]/g, "")
-        : genre.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-      console.log("Cleaned genre:", cleanGenre);
-
-      // Get the appropriate genre details or fall back to pop
-      const genreDetails =
-        sunautoGenrePrompts[cleanGenre] || sunautoGenrePrompts.pop;
-      console.log("Using genre details:", genreDetails);
-
-      // Prepare options for Sonauto
-      const options = {
-        prompt: `${prompt} ringtone, catchy, 30 seconds`,
-        tags: genreDetails,
-        instrumental: !lyrics, // If no lyrics, make it instrumental
-        seed: Math.floor(Math.random() * 1000000),
-        prompt_strength: 2.3,
-      };
-
-      // Add lyrics if provided
-      if (lyrics && lyrics.trim()) {
-        options.lyrics = lyrics;
-        console.log("Using provided lyrics:", lyrics);
-      } else if (prompt) {
-        // Generate lyrics if not provided but we have a prompt
-        try {
-          console.log("Generating lyrics based on prompt...");
-          const generatedLyrics = await generateLyrics(prompt); // Using your existing lyrics generator
-          options.lyrics = generatedLyrics;
-          console.log("Generated lyrics:", generatedLyrics);
-        } catch (lyricsError) {
-          console.error("Error generating lyrics:", lyricsError);
-          // Continue without lyrics if generation fails
-          options.lyrics = "";
-        }
-      }
-
-      // Generate song with Sonauto
-      const taskId = await generateSonautoSong(options);
-
-      // Start polling for completion in the background
-      console.log("Waiting for generation to complete...");
-      pollSonautoCompletion(taskId)
-        .then((result) => {
-          console.log("Song completed:", result);
-        })
-        .catch((err) => {
-          console.error("Error during polling:", err);
-        });
-
-      // Immediately return the task ID to the client
-      res.json({
-        success: true,
-        message: "Song generation started",
-        taskId: taskId,
-        genre: cleanGenre,
-      });
-    } catch (error) {
-      console.error("Error during processing:", error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          error: "An error occurred during processing.",
-          message: error.message,
-        });
-      }
-    }
-  }
-);
 
 // Add a status check endpoint for the client to poll
 app.get("/sonauto-status/:taskId", verifyToken, async (req, res) => {

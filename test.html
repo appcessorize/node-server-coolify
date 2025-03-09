@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sonauto Ringtone Generator</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .container {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      input[type="text"],
+      input[type="password"],
+      select,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 16px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .button-group {
+        display: flex;
+        flex-wrap: wrap;
+        margin-top: 10px;
+        margin-bottom: 10px;
+      }
+      #message {
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 4px;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+      .hidden {
+        display: none;
+      }
+      #audioPlayer {
+        width: 100%;
+        margin-top: 15px;
+      }
+      #loadingSpinner {
+        text-align: center;
+        margin: 20px 0;
+      }
+      .spinner {
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border-left-color: #09f;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      #progress {
+        margin-top: 10px;
+        height: 20px;
+        background-color: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      #progressBar {
+        height: 100%;
+        background-color: #4caf50;
+        width: 0%;
+        transition: width 0.5s;
+      }
+      .card {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: white;
+      }
+      .card-title {
+        font-weight: bold;
+        margin-bottom: 10px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+      }
+      pre {
+        background-color: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        overflow-x: auto;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sonauto Ringtone Generator</h1>
+
+    <div class="container">
+      <div class="card">
+        <div class="card-title">API Configuration & Testing</div>
+
+        <div class="form-group">
+          <label for="apiKey">API Key:</label>
+          <input type="password" id="apiKey" placeholder="Enter API Key" />
+        </div>
+
+        <div class="button-group">
+          <button id="getTokenBtn">Get Token</button>
+          <button id="testConnectionBtn">Test API Connection</button>
+          <button id="validateTokenBtn">Validate Token</button>
+          <button id="clearTokenBtn">Clear Token</button>
+        </div>
+
+        <div id="tokenSection" class="hidden">
+          <div class="form-group">
+            <label for="token">Token:</label>
+            <input type="text" id="token" readonly />
+          </div>
+        </div>
+
+        <div id="apiResponseCard" class="hidden card">
+          <div class="card-title">API Response</div>
+          <pre id="apiResponseData"></pre>
+        </div>
+      </div>
+
+      <div class="card" id="generationSection">
+        <div class="card-title">Generate Ringtone</div>
+
+        <div class="form-group">
+          <label for="prompt">Prompt:</label>
+          <input
+            type="text"
+            id="prompt"
+            placeholder="Enter prompt for your ringtone"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="genre">Genre:</label>
+          <select id="genre">
+            <option value="pop">Pop</option>
+            <option value="rock">Rock</option>
+            <option value="electronic">Electronic</option>
+            <option value="hiphop">Hip Hop</option>
+            <option value="country">Country</option>
+            <option value="jazz">Jazz</option>
+            <option value="classical">Classical</option>
+            <option value="metal">Metal</option>
+            <option value="folk">Folk</option>
+            <option value="reggae">Reggae</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="lyrics">Lyrics (optional):</label>
+          <textarea
+            id="lyrics"
+            rows="4"
+            placeholder="Enter custom lyrics or leave blank for auto-generation"
+          ></textarea>
+        </div>
+
+        <button id="generateBtn">Generate Ringtone</button>
+      </div>
+
+      <div id="loadingSpinner" class="hidden card">
+        <div class="card-title">Generation Status</div>
+        <div style="text-align: center">
+          <div class="spinner"></div>
+          <p id="statusText">Starting generation...</p>
+        </div>
+        <div id="progress">
+          <div id="progressBar"></div>
+        </div>
+      </div>
+
+      <div id="playerSection" class="hidden card">
+        <div class="card-title">Your Generated Ringtone</div>
+        <audio id="audioPlayer" controls></audio>
+        <div class="button-group">
+          <button id="downloadBtn">Download Ringtone</button>
+        </div>
+      </div>
+
+      <div id="message" class="hidden"></div>
+    </div>
+
+    <script>
+      // Configuration
+      const API_URL = "https://ringtone.fanquish.com"; // Your actual server URL
+      const HARDCODED_API_KEY = "3a7c4f8b2e1d9a0b5c6f3e2d1a8b7c4f"; // Your actual API key
+
+      // DOM Elements
+      const apiKeyInput = document.getElementById("apiKey");
+      const getTokenBtn = document.getElementById("getTokenBtn");
+      const testConnectionBtn = document.getElementById("testConnectionBtn");
+      const validateTokenBtn = document.getElementById("validateTokenBtn");
+      const clearTokenBtn = document.getElementById("clearTokenBtn");
+      const tokenInput = document.getElementById("token");
+      const tokenSection = document.getElementById("tokenSection");
+      const generationSection = document.getElementById("generationSection");
+      const promptInput = document.getElementById("prompt");
+      const genreSelect = document.getElementById("genre");
+      const lyricsTextarea = document.getElementById("lyrics");
+      const generateBtn = document.getElementById("generateBtn");
+      const messageDiv = document.getElementById("message");
+      const loadingSpinner = document.getElementById("loadingSpinner");
+      const statusText = document.getElementById("statusText");
+      const playerSection = document.getElementById("playerSection");
+      const audioPlayer = document.getElementById("audioPlayer");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const progressBar = document.getElementById("progressBar");
+      const apiResponseCard = document.getElementById("apiResponseCard");
+      const apiResponseData = document.getElementById("apiResponseData");
+
+      // Current task state
+      let currentTaskId = null;
+      let pollInterval = null;
+      let generatedAudioUrl = null;
+
+      // Event Listeners
+      getTokenBtn.addEventListener("click", getToken);
+      testConnectionBtn.addEventListener("click", testApiConnection);
+      validateTokenBtn.addEventListener("click", validateCurrentToken);
+      clearTokenBtn.addEventListener("click", clearToken);
+      generateBtn.addEventListener("click", generateRingtone);
+      downloadBtn.addEventListener("click", downloadRingtone);
+
+      // Check for saved token on page load and auto-get token if needed
+      document.addEventListener("DOMContentLoaded", () => {
+        // Set the API key in the input field
+        apiKeyInput.value = HARDCODED_API_KEY;
+
+        const savedToken = localStorage.getItem("sonautoToken");
+        if (savedToken) {
+          tokenInput.value = savedToken;
+          tokenSection.classList.remove("hidden");
+          showMessage("Token loaded from local storage.", "info");
+        }
+
+        // Display the API URL for easy reference
+        showMessage(`Using API at: ${API_URL}`, "info");
+      });
+
+      // Test API Connection function
+      async function testApiConnection() {
+        showMessage("Testing API connection...", "info");
+        try {
+          const endpoints = ["/health", "/", "/api/test-button"];
+
+          let successfulEndpoint = null;
+          let responseData = null;
+
+          // Try each endpoint until one works
+          for (const endpoint of endpoints) {
+            try {
+              const response = await fetch(`${API_URL}${endpoint}`, {
+                method: endpoint === "/api/test-button" ? "POST" : "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-API-Key": HARDCODED_API_KEY,
+                },
+              });
+
+              if (response.ok) {
+                successfulEndpoint = endpoint;
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                  responseData = await response.json();
+                } else {
+                  responseData = await response.text();
+                }
+                break;
+              }
+            } catch (e) {
+              console.log(`Endpoint ${endpoint} failed:`, e);
+            }
+          }
+
+          if (successfulEndpoint) {
+            showMessage(
+              `API connection successful! Endpoint: ${successfulEndpoint}`,
+              "success"
+            );
+            displayApiResponse(responseData);
+          } else {
+            throw new Error("All endpoints failed");
+          }
+        } catch (error) {
+          showMessage(`API connection failed: ${error.message}`, "error");
+          console.error("API connection error:", error);
+        }
+      }
+
+      // Validate current token
+      async function validateCurrentToken() {
+        const token = tokenInput.value.trim();
+
+        if (!token) {
+          showMessage(
+            "No token to validate. Please get a token first.",
+            "error"
+          );
+          return;
+        }
+
+        await debugToken(token);
+      }
+
+      // Clear saved token
+      function clearToken() {
+        localStorage.removeItem("sonautoToken");
+        tokenInput.value = "";
+        tokenSection.classList.add("hidden");
+        showMessage("Token cleared from local storage.", "info");
+      }
+
+      // Display API response
+      function displayApiResponse(data) {
+        if (data) {
+          apiResponseCard.classList.remove("hidden");
+          apiResponseData.textContent =
+            typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        }
+      }
+
+      // Token debugging
+      async function debugToken(token) {
+        try {
+          // Display token details for debugging
+          showMessage(`Token: ${token.substring(0, 15)}...`, "info");
+
+          // Attempt to make a simple request with the token
+          const endpoints = ["/auth/health", "/health"];
+
+          let successfulEndpoint = null;
+          let responseData = null;
+
+          // Try each endpoint until one works
+          for (const endpoint of endpoints) {
+            try {
+              const response = await fetch(`${API_URL}${endpoint}`, {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "X-API-Key": HARDCODED_API_KEY,
+                },
+              });
+
+              if (response.ok) {
+                successfulEndpoint = endpoint;
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                  responseData = await response.json();
+                } else {
+                  responseData = await response.text();
+                }
+                break;
+              }
+            } catch (e) {
+              console.log(`Token validation on ${endpoint} failed:`, e);
+            }
+          }
+
+          if (successfulEndpoint) {
+            showMessage(
+              `Token validation successful! Endpoint: ${successfulEndpoint}`,
+              "success"
+            );
+            displayApiResponse(responseData);
+          } else {
+            throw new Error("Token validation failed on all endpoints");
+          }
+        } catch (error) {
+          showMessage(`Token validation failed: ${error.message}`, "error");
+          console.error("Token debug error:", error);
+        }
+      }
+
+      // Get Auth Token
+      async function getToken() {
+        // Use hardcoded API key instead of input value
+        const apiKey = HARDCODED_API_KEY;
+
+        // For convenience, show the hardcoded key in the input field
+        apiKeyInput.value = apiKey;
+
+        try {
+          showMessage("Requesting token...", "info");
+
+          // Log the request details
+          console.log("Requesting token with API key:", HARDCODED_API_KEY);
+
+          const response = await fetch(`${API_URL}/auth/token`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKey,
+            },
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Token response error:", response.status, errorText);
+            throw new Error(
+              `HTTP error! Status: ${response.status}, Details: ${errorText}`
+            );
+          }
+
+          const data = await response.json();
+          tokenInput.value = data.token;
+
+          // Save token to local storage
+          localStorage.setItem("sonautoToken", data.token);
+
+          tokenSection.classList.remove("hidden");
+          generationSection.classList.remove("hidden");
+          showMessage("Token received successfully!", "success");
+          displayApiResponse(data);
+
+          // Debug the token
+          await debugToken(data.token);
+        } catch (error) {
+          showMessage(`Error getting token: ${error.message}`, "error");
+          console.error("Token error:", error);
+        }
+      }
+
+      // Generate Ringtone
+      async function generateRingtone() {
+        const token = tokenInput.value.trim();
+        const prompt = promptInput.value.trim();
+        const genre = genreSelect.value;
+        const lyrics = lyricsTextarea.value.trim();
+
+        if (!token) {
+          showMessage("Please get a token first.", "error");
+          return;
+        }
+
+        if (!prompt) {
+          showMessage("Please enter a prompt.", "error");
+          return;
+        }
+
+        try {
+          // Disable controls during generation
+          generateBtn.disabled = true;
+          loadingSpinner.classList.remove("hidden");
+          playerSection.classList.add("hidden");
+          showMessage("Starting ringtone generation...", "info");
+          updateProgress(5);
+
+          const generationData = {
+            prompt,
+            genre,
+            lyrics: lyrics || undefined, // Only send if not empty
+          };
+
+          console.log("Generation request data:", generationData);
+
+          const response = await fetch(`${API_URL}/generate-sonauto-url`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+              "X-API-Key": HARDCODED_API_KEY, // Adding API key in case server expects it alongside token
+            },
+            body: JSON.stringify(generationData),
+          });
+
+          // Add detailed error handling
+          if (!response.ok) {
+            let errorMessage = `HTTP error! Status: ${response.status}`;
+            try {
+              const errorData = await response.json();
+              console.error("Generation error details:", errorData);
+              errorMessage += `, Details: ${JSON.stringify(errorData)}`;
+            } catch (e) {
+              const errorText = await response.text();
+              console.error("Generation error text:", errorText);
+              errorMessage += `, Response: ${errorText}`;
+            }
+            throw new Error(errorMessage);
+          }
+
+          const data = await response.json();
+          displayApiResponse(data);
+          currentTaskId = data.taskId;
+
+          showMessage(`Generation started! Task ID: ${currentTaskId}`, "info");
+          statusText.textContent = "Generation in progress...";
+          updateProgress(10);
+
+          // Start polling for status
+          startStatusPolling(token, currentTaskId);
+        } catch (error) {
+          generateBtn.disabled = false;
+          loadingSpinner.classList.add("hidden");
+          showMessage(`Error starting generation: ${error.message}`, "error");
+          console.error("Generation error:", error);
+        }
+      }
+
+      // Poll for generation status
+      function startStatusPolling(token, taskId) {
+        let attempts = 0;
+        const maxAttempts = 60; // 5 minutes at 5-second intervals
+        updateProgress(15);
+
+        // Clear any existing interval
+        if (pollInterval) {
+          clearInterval(pollInterval);
+        }
+
+        pollInterval = setInterval(async () => {
+          try {
+            attempts++;
+
+            // Calculate a gradually increasing progress percentage (up to 90%)
+            const progressPercentage = Math.min(15 + attempts * 1.25, 90);
+            updateProgress(progressPercentage);
+
+            const response = await fetch(
+              `${API_URL}/sonauto-status/${taskId}`,
+              {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "X-API-Key": HARDCODED_API_KEY,
+                },
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            displayApiResponse(data);
+            statusText.textContent = `Status: ${data.status}`;
+
+            if (data.completed) {
+              clearInterval(pollInterval);
+              handleCompletedGeneration(data.url);
+            } else if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              throw new Error("Timed out waiting for generation to complete.");
+            }
+          } catch (error) {
+            clearInterval(pollInterval);
+            generateBtn.disabled = false;
+            loadingSpinner.classList.add("hidden");
+            showMessage(`Error checking status: ${error.message}`, "error");
+            console.error("Status polling error:", error);
+          }
+        }, 5000); // Check every 5 seconds
+      }
+
+      // Handle completed generation
+      function handleCompletedGeneration(url) {
+        generatedAudioUrl = url;
+
+        // Update UI elements
+        generateBtn.disabled = false;
+        loadingSpinner.classList.add("hidden");
+        playerSection.classList.remove("hidden");
+
+        // Set the audio source
+        audioPlayer.src = url;
+        audioPlayer.load();
+
+        updateProgress(100);
+        showMessage("Ringtone generated successfully!", "success");
+      }
+
+      // Download the generated ringtone
+      function downloadRingtone() {
+        if (!generatedAudioUrl) {
+          showMessage("No ringtone available to download.", "error");
+          return;
+        }
+
+        const anchor = document.createElement("a");
+        anchor.href = generatedAudioUrl;
+        anchor.download = `ringtone-${Date.now()}.mp3`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      }
+
+      // Helper function to show messages
+      function showMessage(text, type) {
+        const timestamp = new Date().toLocaleTimeString();
+        const formattedMessage = `[${timestamp}] ${text}`;
+
+        messageDiv.innerHTML = formattedMessage + "<br>" + messageDiv.innerHTML;
+        messageDiv.className = type;
+        messageDiv.classList.remove("hidden");
+
+        // Scroll to message
+        messageDiv.scrollIntoView({ behavior: "smooth" });
+
+        // Log to console as well
+        console.log(formattedMessage);
+      }
+
+      // Update progress bar
+      function updateProgress(percentage) {
+        progressBar.style.width = `${percentage}%`;
+      }
+    </script>
+  </body>
+</html>
