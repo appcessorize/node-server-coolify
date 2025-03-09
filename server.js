@@ -1954,24 +1954,36 @@ app.post(
         const taskId = await generateSonautoSong(options);
         console.log("Song generation initiated with task ID:", taskId);
 
-        // Start polling for completion in the background
-        console.log("Starting background polling for completion...");
-        pollSonautoCompletion(taskId)
-          .then((result) => {
-            console.log("Song completed in background:", result);
-          })
-          .catch((err) => {
-            console.error("Error during background polling:", err);
-          });
+        // Wait for the song to complete instead of returning immediately
+        console.log("Waiting for song generation to complete...");
+        try {
+          const result = await pollSonautoCompletion(taskId);
+          console.log("Song generation complete:", result);
 
-        // Immediately return the task ID to the client
-        console.log("Returning successful response to client");
-        res.json({
-          success: true,
-          message: "Song generation started",
-          taskId: taskId,
-          genre: cleanGenre,
-        });
+          if (
+            result.status === "SUCCESS" &&
+            result.song_paths &&
+            result.song_paths.length > 0
+          ) {
+            // Format response to match what iOS app expects (SongResponse format)
+            const response = {
+              audio_url: result.song_paths[0],
+              metadata: {
+                lyrics: options.lyrics || null,
+              },
+            };
+
+            console.log("Returning song data to client:", response);
+            return res.json(response);
+          } else {
+            throw new Error(
+              "Song generation completed but no song paths available"
+            );
+          }
+        } catch (pollError) {
+          console.error("Error during polling:", pollError);
+          throw pollError;
+        }
       } catch (songError) {
         console.error("Song generation error:", songError);
         console.error(
@@ -2226,41 +2238,41 @@ async function pollSonautoCompletion(
 // Add the new endpoint
 
 // Add a status check endpoint for the client to poll
-app.get("/sonauto-status/:taskId", verifyToken, async (req, res) => {
-  const taskId = req.params.taskId;
-  console.log(`Received status check request for Sonauto task: ${taskId}`);
+// app.get("/sonauto-status/:taskId", verifyToken, async (req, res) => {
+//   const taskId = req.params.taskId;
+//   console.log(`Received status check request for Sonauto task: ${taskId}`);
 
-  try {
-    const status = await checkSonautoStatus(taskId);
+//   try {
+//     const status = await checkSonautoStatus(taskId);
 
-    // If successful, return the song URL
-    if (
-      status.status === "SUCCESS" &&
-      status.song_paths &&
-      status.song_paths.length > 0
-    ) {
-      return res.json({
-        success: true,
-        status: status.status,
-        url: status.song_paths[0],
-        completed: true,
-      });
-    }
+//     // If successful, return the song URL
+//     if (
+//       status.status === "SUCCESS" &&
+//       status.song_paths &&
+//       status.song_paths.length > 0
+//     ) {
+//       return res.json({
+//         success: true,
+//         status: status.status,
+//         url: status.song_paths[0],
+//         completed: true,
+//       });
+//     }
 
-    // Otherwise return the current status
-    return res.json({
-      success: true,
-      status: status.status,
-      completed: false,
-    });
-  } catch (error) {
-    console.error("Status check error:", error.message);
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
+//     // Otherwise return the current status
+//     return res.json({
+//       success: true,
+//       status: status.status,
+//       completed: false,
+//     });
+//   } catch (error) {
+//     console.error("Status check error:", error.message);
+//     return res.status(500).json({
+//       success: false,
+//       error: error.message,
+//     });
+//   }
+// });
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
