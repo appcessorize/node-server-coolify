@@ -1904,9 +1904,8 @@ app.post(
       const options = {
         prompt: `${prompt} ringtone, catchy, 30 seconds`,
         tags: genreDetails,
-        instrumental: !lyrics, // If no lyrics, make it instrumental
-        seed: Math.floor(Math.random() * 1000000),
         prompt_strength: 2.3,
+        instrumental: false,
       };
 
       console.log("Initial Sonauto options:", JSON.stringify(options, null, 2));
@@ -1916,13 +1915,7 @@ app.post(
         options.lyrics = lyrics;
         console.log("Using provided lyrics:", lyrics);
 
-        // Important: When lyrics are provided, we can't send tags according to API limitations
-        if (options.tags) {
-          console.log(
-            "Removing tags because lyrics are provided (API constraint)"
-          );
-          delete options.tags;
-        }
+        delete options.tags;
       } else if (prompt) {
         // Generate lyrics if not provided but we have a prompt
         try {
