@@ -2259,7 +2259,7 @@ app.post(
         });
       }
     }
-    console.log("========== END GENERATE SONAUTO URL ==========");
+    console.log("========== END GENERATE SONAUTO URL==========");
   }
 );
 /**
