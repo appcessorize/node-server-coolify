@@ -2041,11 +2041,14 @@ const sonautoLimiter = rateLimit({
 // Then replace your existing generate-sonauto-url endpoint with this version:
 
 // First, add these imports near the top of your server.js file
+// First, make sure to install the required packages:
+// npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner uuid --save
+
+// Add these imports near the top of your server.js file
 const AudioProcessor = require("./audioProcessor");
 const { v4: uuidv4 } = require("uuid");
-// Add this to your existing packages if you don't have it: npm install uuid
 
-// Then replace your generate-sonauto-url endpoint with this:
+// Then replace your existing generate-sonauto-url endpoint with this:
 
 app.post(
   "/generate-sonauto-url",
@@ -2055,6 +2058,7 @@ app.post(
     console.log("========== GENERATE SONAUTO URL ==========");
     console.log("User from token:", req.user);
     console.log("Starting the Sonauto generate-url workflow...");
+    console.log("Request headers:", JSON.stringify(req.headers, null, 2));
     console.log("Request body:", JSON.stringify(req.body, null, 2));
 
     try {
@@ -2076,6 +2080,10 @@ app.post(
       // Get the appropriate genre details or fall back to pop
       const genreDetails =
         sunautoGenrePrompts[cleanGenre] || sunautoGenrePrompts.pop;
+      console.log(
+        "Using genre details:",
+        JSON.stringify(genreDetails, null, 2)
+      );
 
       // Prepare options for Sonauto
       const options = {
@@ -2085,25 +2093,37 @@ app.post(
         instrumental: false,
       };
 
+      console.log("Initial Sonauto options:", JSON.stringify(options, null, 2));
+
       // Add lyrics if provided
       if (lyrics && lyrics.trim()) {
         options.lyrics = lyrics;
+        console.log("Using provided lyrics:", lyrics);
+
         delete options.tags;
       } else if (prompt) {
         // Generate lyrics if not provided but we have a prompt
         try {
           console.log("Generating lyrics based on prompt...");
-          const generatedLyrics = await generateLyrics(prompt);
+          const generatedLyrics = await generateLyrics(prompt); // Using your existing lyrics generator
           options.lyrics = generatedLyrics;
+          console.log("Generated lyrics:", generatedLyrics);
 
+          // Important: When lyrics are provided, we can't send tags according to API limitations
           if (options.tags) {
+            console.log(
+              "Removing tags because lyrics were generated (API constraint)"
+            );
             delete options.tags;
           }
         } catch (lyricsError) {
           console.error("Error generating lyrics:", lyricsError);
+          // Continue without lyrics if generation fails
           options.lyrics = "";
         }
       }
+
+      console.log("Final Sonauto options:", JSON.stringify(options, null, 2));
 
       // Check for SONAUTO_API_KEY
       if (!SONAUTO_API_KEY) {
@@ -2119,75 +2139,89 @@ app.post(
         const taskId = await generateSonautoSong(options);
         console.log("Song generation initiated with task ID:", taskId);
 
-        // Wait for the song to complete
-        const result = await pollSonautoCompletion(taskId);
-        console.log("Song generation complete:", result);
+        // Wait for the song to complete instead of returning immediately
+        console.log("Waiting for song generation to complete...");
+        try {
+          const result = await pollSonautoCompletion(taskId);
+          console.log("Song generation complete:", result);
 
-        if (
-          result.status === "SUCCESS" &&
-          result.song_paths &&
-          result.song_paths.length > 0
-        ) {
-          const originalUrl = result.song_paths[0];
-          console.log("Got OGG URL from Sonauto:", originalUrl);
+          if (
+            result.status === "SUCCESS" &&
+            result.song_paths &&
+            result.song_paths.length > 0
+          ) {
+            const originalUrl = result.song_paths[0];
+            console.log("Received OGG URL from Sonauto:", originalUrl);
 
-          // Create response with the original OGG URL - this will be used as fallback
-          // if conversion fails or the client is happy with the original format
-          const response = {
-            audio_url: originalUrl,
-            metadata: {
-              lyrics: options.lyrics || null,
-            },
-          };
+            // Process the OGG file and upload to R2
+            try {
+              console.log("Processing OGG and uploading to R2...");
+              const processedAudio =
+                await AudioProcessor.processAudioAndUploadToR2(originalUrl, {
+                  startTime: 0,
+                  duration: 30,
+                  format: "m4a",
+                  contactName: prompt,
+                });
 
-          // Check if we should convert or return original
-          // You can add a "convertAudio" param to the request to control this
-          if (req.query.originalFormat === "true") {
-            // Return the original OGG URL if specifically requested
-            console.log("Client requested original format, returning OGG URL");
-            return res.json(response);
-          }
-
-          try {
-            // Process the OGG file directly without saving to disk permanently
-            console.log("Processing OGG to M4A...");
-            const processedAudio =
-              await AudioProcessor.processAudioFromUrlToBuffer(originalUrl, {
-                startTime: 0,
-                duration: 30,
-                format: "m4a",
-              });
-
-            // Schedule temp file cleanup for later
-            setTimeout(() => {
-              AudioProcessor.cleanupTempFiles().catch((err) =>
-                console.error("Error cleaning up temp files:", err)
+              console.log(
+                "File processed and uploaded to R2:",
+                processedAudio.url
               );
-            }, 3600000); // Clean up after 1 hour
 
-            // Return the processed audio directly to the client
-            res.set("Content-Type", processedAudio.contentType);
-            res.set(
-              "Content-Disposition",
-              `attachment; filename="ringtone-${uuidv4()}.m4a"`
+              // Schedule temp file cleanup for later
+              setTimeout(() => {
+                AudioProcessor.cleanupTempFiles().catch((err) =>
+                  console.error("Error cleaning up temp files:", err)
+                );
+              }, 3600000); // Clean up after 1 hour
+
+              // Format response to match iOS app expectations with our new URL
+              const response = {
+                audio_url: processedAudio.url,
+                metadata: {
+                  lyrics: options.lyrics || null,
+                  original_url: originalUrl, // Include the original OGG URL as a fallback
+                },
+              };
+
+              return res.json(response);
+            } catch (processingError) {
+              console.error("Error processing audio:", processingError);
+
+              // If processing fails, return the original OGG URL
+              console.log(
+                "Returning original Sonauto URL due to processing error"
+              );
+              return res.json({
+                audio_url: originalUrl,
+                metadata: {
+                  lyrics: options.lyrics || null,
+                },
+              });
+            }
+          } else {
+            throw new Error(
+              "Song generation completed but no song paths available"
             );
-            return res.send(processedAudio.buffer);
-          } catch (processingError) {
-            console.error("Error processing audio:", processingError);
-            // If processing fails, return the original JSON response with OGG URL
-            return res.json(response);
           }
-        } else {
-          throw new Error(
-            "Song generation completed but no song paths available"
-          );
+        } catch (pollError) {
+          console.error("Error during polling:", pollError);
+          throw pollError;
         }
       } catch (songError) {
         console.error("Song generation error:", songError);
+        console.error(
+          "Error details:",
+          songError.response
+            ? JSON.stringify(songError.response.data, null, 2)
+            : "No response data"
+        );
         throw songError;
       }
     } catch (error) {
       console.error("Error during processing:", error);
+      console.error("Stack trace:", error.stack);
 
       let statusCode = 500;
       let errorMessage = error.message;
@@ -2195,6 +2229,15 @@ app.post(
       // If this is an Axios error with a response, extract more details
       if (error.response) {
         statusCode = error.response.status;
+        console.error(`API responded with status ${statusCode}`);
+        console.error(
+          "Response headers:",
+          JSON.stringify(error.response.headers, null, 2)
+        );
+        console.error(
+          "Response data:",
+          JSON.stringify(error.response.data, null, 2)
+        );
 
         // Use the API's error message if available
         if (error.response.data && error.response.data.error) {

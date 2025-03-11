@@ -1,8 +1,31 @@
+// First, install the AWS SDK for S3 (which works with R2)
+// npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
+
+const {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs-extra");
 const path = require("path");
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
+
+// Configure R2 client
+const r2Client = new S3Client({
+  region: "auto", // R2 uses 'auto' for region
+  endpoint:
+    process.env.R2_ENDPOINT || "https://youraccount.r2.cloudflarestorage.com",
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
+
+const BUCKET_NAME = process.env.R2_BUCKET_NAME || "ringtones";
+const URL_EXPIRATION = 60 * 60 * 24; // 24 hours in seconds
 
 class AudioProcessor {
   /**
@@ -55,7 +78,7 @@ class AudioProcessor {
    * @param {string} outputFormat - Desired output format (m4a, mp3, etc.)
    * @param {number} startTime - Start time in seconds
    * @param {number} duration - Duration in seconds
-   * @returns {Promise<Buffer>} - The processed audio as a buffer
+   * @returns {Promise<{path: string, contentType: string}>} - The path to the processed file and its content type
    */
   static async processAudio(
     inputPath,
@@ -69,6 +92,7 @@ class AudioProcessor {
 
     // Prepare codec and options based on format
     let codecOptions = {};
+    let contentType = "";
 
     if (outputFormat === "m4a") {
       codecOptions = {
@@ -77,18 +101,21 @@ class AudioProcessor {
         channels: 2,
         sampleRate: 44100,
       };
+      contentType = "audio/mp4";
     } else if (outputFormat === "mp3") {
       codecOptions = {
         codec: "libmp3lame",
         bitrate: "256k",
         channels: 2,
       };
+      contentType = "audio/mpeg";
     } else if (outputFormat === "aiff") {
       codecOptions = {
         codec: "pcm_s16be",
         channels: 2,
         sampleRate: 44100,
       };
+      contentType = "audio/aiff";
     }
 
     // Create a temporary output file
@@ -123,14 +150,13 @@ class AudioProcessor {
         .on("end", async () => {
           console.log(`Processing completed: ${tempOutputPath}`);
           try {
-            // Read the file as a buffer
-            const buffer = await fs.readFile(tempOutputPath);
-            // Clean up
-            await fs.unlink(tempOutputPath).catch(() => {});
-            await fs.unlink(inputPath).catch(() => {});
-            resolve(buffer);
+            // Return the path and content type
+            resolve({
+              path: tempOutputPath,
+              contentType,
+            });
           } catch (err) {
-            console.error(`Error reading processed file: ${err.message}`);
+            console.error(`Error after processing: ${err.message}`);
             reject(err);
           }
         })
@@ -138,7 +164,6 @@ class AudioProcessor {
           console.error(`Processing error: ${err.message}`);
           // Clean up temp files
           await fs.unlink(tempOutputPath).catch(() => {});
-          await fs.unlink(inputPath).catch(() => {});
           reject(err);
         })
         .run();
@@ -146,42 +171,99 @@ class AudioProcessor {
   }
 
   /**
-   * Process an audio file from a URL and return the processed data as a buffer
+   * Upload a file to Cloudflare R2 storage
+   * @param {string} filePath - Path to the local file
+   * @param {string} contentType - MIME type of the file
+   * @param {string} fileName - Name to use for the object in R2
+   * @returns {Promise<string>} - The presigned URL to access the file
+   */
+  static async uploadToR2(filePath, contentType, fileName) {
+    try {
+      const fileData = await fs.readFile(filePath);
+
+      const key = `ringtones/${fileName}`;
+
+      // Upload to R2
+      const command = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+        Body: fileData,
+        ContentType: contentType,
+      });
+
+      const response = await r2Client.send(command);
+      console.log("Upload successful:", response);
+
+      // Create a presigned URL for temporary access
+      const getCommand = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      });
+
+      const presignedUrl = await getSignedUrl(r2Client, getCommand, {
+        expiresIn: URL_EXPIRATION,
+      });
+
+      // Clean up the local file
+      await fs.unlink(filePath).catch((err) => {
+        console.error(`Error removing temporary file: ${err.message}`);
+      });
+
+      return presignedUrl;
+    } catch (error) {
+      console.error(`Error uploading to R2: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Process an audio file from a URL, upload to R2, and return a temporary URL
    * @param {string} audioUrl - URL of the audio file
    * @param {object} options - Processing options
-   * @returns {Promise<{buffer: Buffer, contentType: string}>} - The processed audio buffer and content type
+   * @returns {Promise<{url: string, contentType: string}>} - The temporary URL and content type
    */
-  static async processAudioFromUrlToBuffer(audioUrl, options = {}) {
-    const { startTime = 0, duration = 30, format = "m4a" } = options;
+  static async processAudioAndUploadToR2(audioUrl, options = {}) {
+    const {
+      startTime = 0,
+      duration = 30,
+      format = "m4a",
+      contactName = "",
+    } = options;
 
     try {
-      // Get content type based on format
-      const contentType =
-        format === "m4a"
-          ? "audio/mp4"
-          : format === "mp3"
-          ? "audio/mpeg"
-          : format === "aiff"
-          ? "audio/aiff"
-          : "application/octet-stream";
-
       // Download the file to a temporary location
       const downloadedPath = await this.downloadFile(audioUrl);
 
       // Process the file
-      const audioBuffer = await this.processAudio(
+      const processed = await this.processAudio(
         downloadedPath,
         format,
         startTime,
         duration
       );
 
+      // Clean up the downloaded file
+      await fs.unlink(downloadedPath).catch(() => {});
+
+      // Generate a unique filename
+      const safeContactName = contactName
+        .replace(/[^a-zA-Z0-9]/g, "_")
+        .substring(0, 20);
+      const fileName = `ringtone_${safeContactName}_${Date.now()}.${format}`;
+
+      // Upload to R2 and get a presigned URL
+      const presignedUrl = await this.uploadToR2(
+        processed.path,
+        processed.contentType,
+        fileName
+      );
+
       return {
-        buffer: audioBuffer,
-        contentType,
+        url: presignedUrl,
+        contentType: processed.contentType,
       };
     } catch (error) {
-      console.error(`Error processing audio: ${error.message}`);
+      console.error(`Error in processAudioAndUploadToR2: ${error.message}`);
       throw error;
     }
   }
